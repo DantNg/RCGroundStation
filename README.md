@@ -1,0 +1,118 @@
+# Lite Ground Station — Desktop (Windows / Linux)
+
+A cross-platform desktop port of the CrowPanel ESP32 ground station, written in
+**Python + PySide6 (Qt) + pymavlink**. It is a **map-centric fly view** for
+autonomous work: the satellite map fills the window and the instruments float on
+top. It receives & decodes MAVLink telemetry, shows a compact circular HUD, and
+— unlike the embedded version — can **command the vehicle**: arm/disarm, one-tap
+flight modes (LOITER / STAB / ALTH / LAND, +RTL/GUIDED), takeoff, and guided
+"Fly To Here".
+
+![screenshot](docs/screenshot.png)
+
+## Features
+
+- **Map-centric fly view** — the satellite map is the workspace (fills the
+  window); a small **circular HUD**, the control panel and the message log float
+  over it as overlays, like a modern GCS fly view.
+- **Circular attitude HUD** — a round PFD "ball": gradient sky/ground horizon
+  clipped to a circle, roll scale on the bezel, amber boresight, heading box and
+  a tight data strip (mode/arming, ALT·SPD·climb, battery·GPS·link). Everything
+  scales from the widget size and stays glanceable even when small.
+- **Responsive** — overlays reposition to the window size and fold away when
+  cramped (the message log hides first, controls go compact), so it works from a
+  wide desktop down to a **~4.3" 480×272** panel. The map always stays the focus.
+- **Control panel** — `ARM` / `DISARM` (with a *Force* option and an arm
+  confirmation), a **`TAKEOFF`** button (prompts for altitude, auto-switches to
+  GUIDED), and quick **flight-mode buttons**. The button matching the vehicle's
+  live mode is highlighted from incoming HEARTBEATs.
+- **Guided "Fly To Here"** — right-click anywhere on the map → *Fly To Here* and
+  the vehicle flies to that point (auto-switches to GUIDED, sends a
+  `SET_POSITION_TARGET_GLOBAL_INT`). A magenta target marker shows the goal; set
+  the guided altitude or clear the target from the same menu.
+- **Messages log (Mission-Planner style)** — every STATUSTEXT, COMMAND_ACK and
+  local notice, **colour-coded by severity**. Warnings and errors are *also*
+  surfaced as **banners over the map** (top-centre, auto-fading, click-through)
+  so the operator never has to look away from the flight area to catch a pre-arm
+  failure or battery alarm.
+- **Satellite map** — Web-Mercator XYZ tiles (Esri imagery by default, OSM
+  street as an option) with a heading-rotated drone marker, breadcrumb trail,
+  follow/pan/zoom, and an on-disk tile cache.
+- **Links** — Serial (USB telemetry radio), UDP (SITL / the ESP32's WiFi
+  forward / the bundled simulator), or TCP (SITL).
+
+## Architecture (SOLID)
+
+```
+gcs/
+  domain/      telemetry value objects + flight-mode tables   (pure data, no I/O)
+  interfaces/  ITelemetryLink (read) + ICommandSink (write)    (DIP / ISP ports)
+  mavlink/     PymavlinkLink, TelemetryDecoder, CommandService (the only pymavlink code)
+  app/         TelemetryStore (mutex), LinkManager (worker thread), GcsController (root)
+  ui/          HUD, panels, map, connection bar, MainWindow     (passive Qt views)
+  config.py    persisted connection settings
+main.py        entry point
+tools/sim_udp.py   interactive MAVLink simulator (no hardware needed)
+```
+
+- **SRP** — each class has one job (decode, store, command, draw…).
+- **OCP** — add a transport by implementing the ports; add a vehicle's modes by
+  adding a `ModeTable`; add a map source by adding a `TileProvider`. No edits to
+  callers.
+- **LSP** — `PymavlinkLink` is used purely through the port interfaces.
+- **ISP** — readers depend on `ITelemetryLink`, the command service on
+  `ICommandSink`; neither drags in the other.
+- **DIP** — `app/` and `ui/` depend on abstractions; only `mavlink/` imports
+  pymavlink. The UI is Qt-only and never blocks on I/O (it polls a thread-safe
+  store on a timer); the worker is I/O-only and never touches Qt.
+
+## Install & run
+
+```bash
+cd desktop
+python -m pip install -r requirements.txt     # PySide6, pymavlink, pyserial
+python main.py
+```
+
+Pick a link in the top bar and press **Connect**.
+
+### Try it without a drone
+
+In one terminal run the simulator, in another run the app and connect via **UDP**
+on port **14550** (the default in the bar):
+
+```bash
+python tools/sim_udp.py          # streams ArduCopter telemetry + answers commands
+python main.py                   # Link: UDP, port 14550, Connect
+```
+
+The simulator answers ARM/DISARM, SET_MODE, **NAV_TAKEOFF** and
+**SET_POSITION_TARGET** (Fly To Here), so every button visibly works: arm →
+TAKEOFF makes the marker climb; right-click the map → *Fly To Here* makes it fly
+to the point. It also refuses arming for the first few seconds so you can see a
+pre-arm **error** in the message log and banner — exactly like Mission Planner.
+
+### Connect to a real vehicle
+
+- **Serial**: choose *Serial*, pick the COM port / `/dev/ttyUSB*`, set the baud
+  (telemetry radios are usually `57600`), Connect.
+- **UDP**: point SITL or the ESP32's WiFi-forward at this machine's UDP `14550`.
+- **TCP**: SITL on `127.0.0.1:5760`.
+
+> Arming spins motors. The app asks for confirmation and *Force* skips the
+> vehicle's pre-arm safety checks — use it only on the bench with props off.
+
+## Package a Windows .exe (optional)
+
+```bash
+python -m pip install pyinstaller
+pyinstaller --noconsole --name LiteGCS --add-data "gcs;gcs" main.py
+# dist/LiteGCS/LiteGCS.exe
+```
+
+## Notes
+
+- Flight-mode names/numbers follow the ArduPilot **Copter** table (matches the
+  firmware's `FlightMode.h`). Add other vehicles in `gcs/domain/flight_modes.py`.
+- Settings persist to `~/.lite_gcs/config.json`; tiles cache under
+  `~/.lite_gcs/tiles/`.
