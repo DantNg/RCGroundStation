@@ -15,17 +15,39 @@ flight modes (LOITER / STAB / ALTH / LAND, +RTL/GUIDED), takeoff, and guided
 - **Map-centric fly view** — the satellite map is the workspace (fills the
   window); a small **circular HUD**, the control panel and the message log float
   over it as overlays, like a modern GCS fly view.
+- **Live camera + picture-in-picture switch** — a **webcam view** (Qt
+  Multimedia) is a second full-screen-capable view alongside the map. One view
+  is primary (fills the window), the other shrinks to a **corner PIP tile**; tap
+  the tile (or press **`V`**) to swap which one is the main view. Pick the camera
+  device and start/stop the feed from its header strip.
+- **Collapsing connection bar + combined top pill** — once a link is up the
+  whole connection bar **folds into one slim top-left pill** that holds both the
+  **connection status** (green/amber dot + link label + *Disconnect*) and the
+  **active view's controls** (map provider/follow/zoom, or camera device/start),
+  so there's only one small bar to read. On small screens it sheds its labels to
+  stay narrow. Disconnecting brings the full bar back. Press **`F11`** for
+  fullscreen — handy on a small dedicated panel.
 - **Circular attitude HUD** — a round PFD "ball": gradient sky/ground horizon
   clipped to a circle, roll scale on the bezel, amber boresight, heading box and
   a tight data strip (mode/arming, ALT·SPD·climb, battery·GPS·link). Everything
   scales from the widget size and stays glanceable even when small.
-- **Responsive** — overlays reposition to the window size and fold away when
-  cramped (the message log hides first, controls go compact), so it works from a
-  wide desktop down to a **~4.3" 480×272** panel. The map always stays the focus.
-- **Control panel** — `ARM` / `DISARM` (with a *Force* option and an arm
-  confirmation), a **`TAKEOFF`** button (prompts for altitude, auto-switches to
-  GUIDED), and quick **flight-mode buttons**. The button matching the vehicle's
-  live mode is highlighted from incoming HEARTBEATs.
+- **Responsive** — overlays reposition to the window size and shrink when
+  cramped (the message log hides first; the HUD, PIP tile and top pill all scale
+  down and the control column narrows), so it works from a wide desktop, down to
+  a small **4.3" FullHD** dedicated panel (Qt high-DPI scaling), down to a
+  **~480×272** panel. The primary view always stays the focus.
+- **Control panel (collapsible)** — hidden by default so it never covers the
+  map; a small **handle at the top-right** (or the **`C`** key) slides it out on
+  demand. It holds one **`ARM`/`DISARM` toggle** that recolours and relabels
+  itself from the live armed state (green ARM ↔ red DISARM), with a *Force*
+  option and an arm confirmation; a **`TAKEOFF`** button (prompts for altitude,
+  auto-switches to GUIDED); and a compact **flight-mode picker** (a combobox +
+  `SET MODE`) that follows the vehicle's live mode from incoming HEARTBEATs.
+- **Telemetry stream requests** — on connect the GCS asks the vehicle to stream
+  `ATTITUDE` (the HUD horizon), position and status (via `REQUEST_DATA_STREAM` +
+  `SET_MESSAGE_INTERVAL`), re-requesting periodically. Without this a real
+  ArduPilot/PX4 vehicle leaves the artificial horizon frozen even though the link
+  is up, because it only streams `ATTITUDE` when a GCS asks for it.
 - **Guided "Fly To Here"** — right-click anywhere on the map → *Fly To Here* and
   the vehicle flies to that point (auto-switches to GUIDED, sends a
   `SET_POSITION_TARGET_GLOBAL_INT`). A magenta target marker shows the goal; set

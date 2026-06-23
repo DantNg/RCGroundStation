@@ -21,6 +21,7 @@ NoticeSink = Callable[[StatusText], None]
 _LINK_TIMEOUT_MS = 3000   # no heartbeat for this long ⇒ link considered down
 _HEARTBEAT_MS = 1000      # our own GCS heartbeat cadence
 _RECV_TIMEOUT_S = 0.2     # recv poll granularity (keeps stop() responsive)
+_STREAM_REQUEST_MS = 5000  # re-ask the vehicle to stream telemetry this often
 
 
 class LinkManager:
@@ -69,6 +70,7 @@ class LinkManager:
 
         frames = good_bytes = errors = 0
         last_hb_sent = 0
+        last_stream_req = 0
         last_frame_ms = 0
         announced = False
         self._set_source(link.source_name)
@@ -81,6 +83,16 @@ class LinkManager:
                 except Exception:
                     pass
                 last_hb_sent = now
+
+            # Once the vehicle is known, (re)request telemetry streams so the
+            # autopilot actually sends ATTITUDE/position/status — without this a
+            # real vehicle leaves the HUD horizon frozen even though it's "up".
+            if link.target[0] != 0 and now - last_stream_req >= _STREAM_REQUEST_MS:
+                try:
+                    link.request_data_streams()
+                except Exception:
+                    pass
+                last_stream_req = now
 
             try:
                 msg = link.recv(_RECV_TIMEOUT_S)

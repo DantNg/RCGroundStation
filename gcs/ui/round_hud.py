@@ -28,7 +28,7 @@ def _clamp(v, lo, hi):
 class RoundHud(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumSize(150, 180)
+        self.setMinimumSize(80, 96)   # may shrink on small panels; sizing is geometry-driven
         # Translucent floating card: WA_TranslucentBackground makes Qt clear the
         # widget every frame and composite over the map — without it a child with
         # an unpainted (transparent) background smears and the horizon "freezes".
@@ -70,7 +70,7 @@ class RoundHud(QWidget):
         p.setRenderHint(QPainter.Antialiasing, True)
         p.setRenderHint(QPainter.TextAntialiasing, True)
         w, h = self.width(), self.height()
-        s = _clamp(min(w, h) / 220.0, 0.5, 1.6)
+        s = _clamp(min(w, h) / 220.0, 0.42, 1.6)
 
         # opaque rounded card (covers the whole body; only the rounded corners
         # stay transparent so the map shows through)
@@ -205,14 +205,20 @@ class RoundHud(QWidget):
         p.setBrush(QBrush(theme.HUD_BOX_BG))
         p.drawRoundedRect(rect, 3 * s, 3 * s)
         p.setPen(QPen(theme.HUD_TEXT))
-        p.setFont(QFont("Consolas", max(8, int(11 * s))))
+        hf = QFont("Consolas")
+        hf.setPixelSize(max(7, int(bh * 0.72)))
+        p.setFont(hf)
         p.drawText(rect, Qt.AlignCenter, f"{int(round(self._heading)) % 360:03d}")
 
     def _draw_strip(self, p, w, y, strip_h, line_h, s) -> None:
         x = int(6 * s)
-        f_mode = QFont("Segoe UI", max(9, int(11 * s)))
+        # Size the text to the row height (in pixels) so it shrinks with the HUD
+        # instead of bottoming out at a fixed point size and overflowing.
+        f_mode = QFont("Segoe UI")
         f_mode.setBold(True)
-        f = QFont("Consolas", max(8, int(10 * s)))
+        f_mode.setPixelSize(max(8, int(line_h * 0.92)))
+        f = QFont("Consolas")
+        f.setPixelSize(max(7, int(line_h * 0.82)))
 
         # line 1: mode + arming
         p.setFont(f_mode)
@@ -226,8 +232,7 @@ class RoundHud(QWidget):
         p.setFont(f)
         p.setPen(QPen(theme.HUD_TEXT))
         p.drawText(QRectF(x, y + line_h, w - 2 * x, line_h), Qt.AlignVCenter | Qt.AlignLeft,
-                   f"ALT {self._alt:5.0f}m   SPD {self._airspeed:4.1f}   "
-                   f"{self._climb:+.1f}")
+                   f"ALT {self._alt:.0f}m  SPD {self._airspeed:.1f}  {self._climb:+.1f}")
 
         # line 3: battery / gps / link (coloured)
         y3 = y + 2 * line_h

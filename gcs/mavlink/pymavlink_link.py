@@ -84,6 +84,41 @@ class PymavlinkLink(ITelemetryLink, ICommandSink):
     def target(self) -> Tuple[int, int]:
         return (self._target_system, self._target_component)
 
+    def request_data_streams(self, rate_hz: int = 12) -> None:
+        conn = self._conn
+        if conn is None or self._target_system == 0:
+            return
+        sys, comp = self._target_system, self._target_component
+        att_hz = max(rate_hz, 10)
+        # ArduPilot groups its messages into these legacy stream sets. EXTRA1 is
+        # ATTITUDE — the artificial horizon — so it gets the highest rate.
+        streams = (
+            (mavutil.mavlink.MAV_DATA_STREAM_EXTRA1, att_hz),            # ATTITUDE
+            (mavutil.mavlink.MAV_DATA_STREAM_EXTRA2, max(rate_hz // 2, 5)),  # VFR_HUD
+            (mavutil.mavlink.MAV_DATA_STREAM_EXTRA3, 2),                 # AHRS/extras
+            (mavutil.mavlink.MAV_DATA_STREAM_POSITION, 5),              # GLOBAL_POSITION_INT
+            (mavutil.mavlink.MAV_DATA_STREAM_EXTENDED_STATUS, 2),       # SYS_STATUS, GPS_RAW
+        )
+        with self._send_lock:
+            for stream_id, hz in streams:
+                try:
+                    conn.mav.request_data_stream_send(sys, comp, stream_id, hz, 1)
+                except Exception:
+                    pass
+            # Belt-and-suspenders for stacks that prefer the modern command
+            # (PX4 and newer ArduPilot honour MAV_CMD_SET_MESSAGE_INTERVAL).
+            for msg_id, hz in (
+                (mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE, att_hz),
+                (mavutil.mavlink.MAVLINK_MSG_ID_VFR_HUD, max(rate_hz // 2, 5)),
+                (mavutil.mavlink.MAVLINK_MSG_ID_GLOBAL_POSITION_INT, 5),
+            ):
+                try:
+                    conn.mav.command_long_send(
+                        sys, comp, mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL, 0,
+                        float(msg_id), float(int(1_000_000 / hz)), 0, 0, 0, 0, 0)
+                except Exception:
+                    pass
+
     # ── ICommandSink ────────────────────────────────────────────────────────
     def command_long(self, command: int, *params: float, confirmation: int = 0) -> None:
         sys, comp = self._require_target()

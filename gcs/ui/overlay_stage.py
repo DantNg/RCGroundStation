@@ -1,8 +1,10 @@
-"""A container that fills itself with one base widget and floats overlays on top.
+"""A container that floats children over a full-bleed base, owned by the caller.
 
-Used for the fly-view: the map is the base (fills the whole stage) and the round
-HUD, control panel and message log float over it. Positioning is delegated to a
-layout callback so the owner (MainWindow) decides placement and responsive
+Used for the fly-view: a primary view (map *or* camera) fills the stage while
+the round HUD, control panel, message log, the corner picture-in-picture tile
+and the connection chip float over it. The stage stays dumb — it only reparents
+the widgets it is given and, on every resize, hands its size to a layout
+callback so the owner (MainWindow) decides placement, z-order and responsive
 hide/show in one place.
 """
 from __future__ import annotations
@@ -13,17 +15,15 @@ from PySide6.QtWidgets import QWidget
 
 
 class OverlayStage(QWidget):
-    def __init__(self, base: QWidget, on_layout: Callable[[int, int], None], parent=None):
+    def __init__(self, on_layout: Callable[[int, int], None], parent=None):
         super().__init__(parent)
-        self._base = base
-        self._base.setParent(self)
         self._on_layout = on_layout
 
-    def add_overlay(self, widget: QWidget) -> None:
+    def add(self, widget: QWidget) -> QWidget:
+        """Reparent a widget onto the stage (added in back-to-front order)."""
         widget.setParent(self)
-        widget.raise_()
+        return widget
 
     def resizeEvent(self, event) -> None:
-        self._base.setGeometry(self.rect())
         self._on_layout(self.width(), self.height())
         super().resizeEvent(event)

@@ -151,36 +151,49 @@ class MapWidget(QWidget):
         self._loader = _TileLoader()
         self._loader.ready.connect(self.update)
 
+        # The map canvas fills the whole widget; its controls live in a separate
+        # compact bar that the MainWindow hosts in the shared top pill.
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
-        outer.addLayout(self._build_controls())
+        self._controls_bar = self._build_controls()
         self._canvas = _MapCanvas(self)
         outer.addWidget(self._canvas, 1)
 
-    def _build_controls(self) -> QHBoxLayout:
-        row = QHBoxLayout()
-        row.setContentsMargins(6, 4, 6, 4)
-        row.addWidget(QLabel("Map:"))
+    def _build_controls(self) -> QWidget:
+        bar = QWidget()
+        bar.setAttribute(Qt.WA_TranslucentBackground, True)
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        self._map_label = QLabel("Map:")
+        row.addWidget(self._map_label)
         combo = QComboBox()
         combo.addItems(list(PROVIDERS.keys()))
         combo.currentTextChanged.connect(self._set_provider)
         row.addWidget(combo)
-        row.addStretch(1)
-        self._follow_btn = QPushButton("Follow: ON")
+        self._follow_btn = QPushButton("Follow")
         self._follow_btn.setCheckable(True)
         self._follow_btn.setChecked(True)
+        self._follow_btn.setToolTip("Keep the map centred on the vehicle")
         self._follow_btn.clicked.connect(self._toggle_follow)
         row.addWidget(self._follow_btn)
         minus = QPushButton("−")
-        minus.setFixedWidth(34)
+        minus.setObjectName("IconButton")
         minus.clicked.connect(lambda: self._set_zoom(self._zoom - 1))
         plus = QPushButton("+")
-        plus.setFixedWidth(34)
+        plus.setObjectName("IconButton")
         plus.clicked.connect(lambda: self._set_zoom(self._zoom + 1))
         row.addWidget(minus)
         row.addWidget(plus)
-        return row
+        return bar
+
+    def controls_widget(self) -> QWidget:
+        """The map's provider/follow/zoom bar (hosted in the shared top pill)."""
+        return self._controls_bar
+
+    def set_controls_compact(self, compact: bool) -> None:
+        self._map_label.setVisible(not compact)
 
     # ── data in ────────────────────────────────────────────────────────────
     def update_from(self, s: TelemetrySnapshot) -> None:
@@ -214,7 +227,6 @@ class MapWidget(QWidget):
 
     def _toggle_follow(self) -> None:
         self._follow = self._follow_btn.isChecked()
-        self._follow_btn.setText(f"Follow: {'ON' if self._follow else 'OFF'}")
         if self._follow and self._have_fix:
             self._center_lat, self._center_lon = self._lat, self._lon
         self._canvas.update()
@@ -384,7 +396,6 @@ class _MapCanvas(QWidget):
         if o._follow:
             o._follow = False
             o._follow_btn.setChecked(False)
-            o._follow_btn.setText("Follow: OFF")
         z = o._zoom
         cx_px, cy_px = _lonlat_to_world_px(o._center_lat, o._center_lon, z)
         cx_px -= delta.x()

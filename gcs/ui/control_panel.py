@@ -1,21 +1,37 @@
-"""Command panel: arm / disarm and one-tap flight-mode buttons.
+"""Command panel: arm / disarm and a compact flight-mode picker.
 
 The view is decoupled from the command service via Qt signals — it announces
 *intent* (``arm_requested`` / ``mode_requested``) and the MainWindow routes that
-to :class:`~gcs.mavlink.command_service.CommandService`. The currently active
-mode is highlighted by reading back HEARTBEAT telemetry, so the panel reflects
-the vehicle's real state, not just what was clicked.
+to :class:`~gcs.mavlink.command_service.CommandService`. To keep the panel small
+on the fly-view, flight modes are chosen from a **combobox + SET MODE** button
+rather than a wall of buttons. The combobox follows the vehicle's live mode
+(read back from HEARTBEAT) so it always reflects the real state — but it never
+overrides a selection while its dropdown is open, so picking a target is smooth.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
-from PySide6.QtWidgets import (QCheckBox, QGridLayout, QHBoxLayout, QInputDialog,
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QInputDialog, QLabel,
                                QMessageBox, QPushButton)
+from PySide6.QtCore import Qt, Signal
 
 from ..domain import flight_modes
 from ..domain.telemetry import TelemetrySnapshot
-from . import theme
 from .widgets import Panel
+
+
+def _mode_choices():
+    """Ordered (name) list: curated quick modes first, then the rest of the table."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for qm in list(flight_modes.QUICK_MODES) + list(flight_modes.EXTRA_MODES):
+        if qm.mode_name not in seen:
+            seen.add(qm.mode_name)
+            out.append(qm.mode_name)
+    for cname in flight_modes.ARDUCOPTER.by_id.values():
+        if cname not in seen:
+            seen.add(cname)
+            out.append(cname)
+    return out
 
 
 class ControlPanel(Panel):
@@ -29,18 +45,15 @@ class ControlPanel(Panel):
         body = self.body()
         self._connected = False
         self._last_takeoff_alt = 10.0
+        self._live_mode: str | None = None
+        self._armed = False
 
-        # ── arm / disarm row ──────────────────────────────────────────────
-        arm_row = QHBoxLayout()
-        self._arm = QPushButton("ARM")
-        self._arm.setObjectName("Arm")
-        self._arm.clicked.connect(self._on_arm)
-        self._disarm = QPushButton("DISARM")
-        self._disarm.setObjectName("Disarm")
-        self._disarm.clicked.connect(self._on_disarm)
-        arm_row.addWidget(self._arm)
-        arm_row.addWidget(self._disarm)
-        body.addLayout(arm_row)
+        # ── single arm/disarm toggle (reflects the live armed state) ───────
+        self._arm_toggle = QPushButton("ARM")
+        self._arm_toggle.setObjectName("Arm")
+        self._arm_toggle.setMinimumHeight(42)
+        self._arm_toggle.clicked.connect(self._on_arm_toggle)
+        body.addWidget(self._arm_toggle)
 
         self._force = QCheckBox("Force (skip pre-arm checks)")
         body.addWidget(self._force)
@@ -52,62 +65,87 @@ class ControlPanel(Panel):
         self._takeoff.clicked.connect(self._on_takeoff)
         body.addWidget(self._takeoff)
 
-        # ── flight-mode grid ──────────────────────────────────────────────
-        grid = QGridLayout()
-        grid.setSpacing(6)
-        self._mode_buttons = {}
-        self._extra_buttons = []
-        extra_names = {qm.mode_name for qm in flight_modes.EXTRA_MODES}
-        modes = list(flight_modes.QUICK_MODES) + list(flight_modes.EXTRA_MODES)
-        for i, qm in enumerate(modes):
-            btn = QPushButton(qm.label)
-            btn.setObjectName("Mode")
-            btn.setToolTip(qm.description)
-            btn.setCheckable(True)
-            btn.clicked.connect(lambda _checked, name=qm.mode_name: self.mode_requested.emit(name))
-            self._mode_buttons[qm.mode_name] = btn
-            if qm.mode_name in extra_names:
-                self._extra_buttons.append(btn)
-            grid.addWidget(btn, i // 2, i % 2)
-        body.addLayout(grid)
-        body.addStretch(1)
+        # ── flight-mode picker (combobox + apply) ──────────────────────────
+        self._mode_title = QLabel("FLIGHT MODE")
+        self._mode_title.setObjectName("PanelTitle")
+        body.addWidget(self._mode_title)
 
+        self._mode_combo = QComboBox()
+        descriptions = {qm.mode_name: qm.description
+                        for qm in flight_modes.QUICK_MODES + flight_modes.EXTRA_MODES}
+        for name in _mode_choices():
+            self._mode_combo.addItem(name, name)
+            if name in descriptions:
+                self._mode_combo.setItemData(
+                    self._mode_combo.count() - 1, descriptions[name], Qt.ToolTipRole)
+        body.addWidget(self._mode_combo)
+
+        self._set_mode = QPushButton("SET MODE")
+        self._set_mode.setObjectName("Mode")
+        self._set_mode.setToolTip("Switch the vehicle to the selected flight mode")
+        self._set_mode.clicked.connect(self._on_set_mode)
+        body.addWidget(self._set_mode)
+
+        body.addStretch(1)
         self.set_connected(False)
 
     # ── external state ─────────────────────────────────────────────────────
     def set_connected(self, connected: bool) -> None:
         self._connected = connected
-        self._arm.setEnabled(connected)
-        self._disarm.setEnabled(connected)
+        self._arm_toggle.setEnabled(connected)
         self._takeoff.setEnabled(connected)
-        for btn in self._mode_buttons.values():
-            btn.setEnabled(connected)
+        self._mode_combo.setEnabled(connected)
+        self._set_mode.setEnabled(connected)
+        if not connected:
+            self._set_armed_ui(False)
 
     def set_compact(self, compact: bool) -> None:
         """On small screens, drop the secondary controls to save height."""
         self._force.setVisible(not compact)
-        for btn in self._extra_buttons:
-            btn.setVisible(not compact)
+        self._mode_title.setVisible(not compact)
 
     def update_from(self, s: TelemetrySnapshot) -> None:
+        armed = s.mode.armed if s.heartbeat_seen else False
+        if armed != self._armed:
+            self._set_armed_ui(armed)
+
         active = flight_modes.mode_name(s.mode.autopilot, s.mode.custom_mode) \
             if s.heartbeat_seen else None
-        for name, btn in self._mode_buttons.items():
-            on = (name == active)
-            btn.setChecked(on)
-            # highlight the live mode with the accent colour
-            btn.setStyleSheet(
-                f"background-color: {theme.ACCENT}; color: #0d1117; border: none;"
-                if on else "")
+        if active == self._live_mode:
+            return
+        self._live_mode = active
+        # follow the vehicle's live mode, but don't yank the user's open dropdown
+        if active is None or self._mode_combo.view().isVisible():
+            return
+        idx = self._mode_combo.findData(active)
+        if idx < 0:
+            self._mode_combo.addItem(active, active)
+            idx = self._mode_combo.findData(active)
+        self._mode_combo.blockSignals(True)
+        self._mode_combo.setCurrentIndex(idx)
+        self._mode_combo.blockSignals(False)
+
+    def _set_armed_ui(self, armed: bool) -> None:
+        """Recolour/relabel the toggle: green ARM when safe, red DISARM when hot."""
+        self._armed = armed
+        self._arm_toggle.setText("DISARM" if armed else "ARM")
+        self._arm_toggle.setObjectName("Disarm" if armed else "Arm")
+        # re-apply the object-name-specific QSS (Qt needs an explicit re-polish)
+        self._arm_toggle.style().unpolish(self._arm_toggle)
+        self._arm_toggle.style().polish(self._arm_toggle)
 
     # ── handlers ────────────────────────────────────────────────────────────
-    def _on_arm(self) -> None:
-        if self._confirm("Arm the vehicle?",
-                         "The motors may spin. Make sure the area is clear."):
+    def _on_arm_toggle(self) -> None:
+        if self._armed:
+            self.disarm_requested.emit(self._force.isChecked())
+        elif self._confirm("Arm the vehicle?",
+                           "The motors may spin. Make sure the area is clear."):
             self.arm_requested.emit(self._force.isChecked())
 
-    def _on_disarm(self) -> None:
-        self.disarm_requested.emit(self._force.isChecked())
+    def _on_set_mode(self) -> None:
+        name = self._mode_combo.currentData()
+        if name:
+            self.mode_requested.emit(name)
 
     def _on_takeoff(self) -> None:
         alt, ok = QInputDialog.getDouble(

@@ -46,6 +46,15 @@ class ITelemetryLink(ABC):
     def target(self) -> Tuple[int, int]:
         """``(system, component)`` of the vehicle, or ``(0, 0)`` until learned."""
 
+    def request_data_streams(self, rate_hz: int = 12) -> None:
+        """Ask the vehicle to stream telemetry (ATTITUDE, position, status…).
+
+        ArduPilot/PX4 only send many messages — notably ``ATTITUDE`` (the HUD
+        horizon) — when a GCS requests the stream. SITL and the bundled simulator
+        stream unconditionally, so this is a no-op there; real links need it.
+        Default is a no-op for transports that can't request streams.
+        """
+
 
 class ICommandSink(ABC):
     """Write side: low-level outgoing MAVLink commands to the active target.
