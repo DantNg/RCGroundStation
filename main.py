@@ -18,6 +18,7 @@ from PySide6.QtWidgets import QApplication
 from gcs.app.controller import GcsController
 from gcs.config import AppConfig
 from gcs.ui.main_window import MainWindow
+from PySide6.QtCore import Qt
 
 
 def main() -> int:
@@ -28,7 +29,13 @@ def main() -> int:
     config = AppConfig.load()
     controller = GcsController()
     window = MainWindow(controller, config)
-    window.show()
+    window.setWindowFlags(
+        Qt.Window |
+        Qt.FramelessWindowHint
+    )
+
+    window.showFullScreen()
+    # window.show()
     return app.exec()
 
 
