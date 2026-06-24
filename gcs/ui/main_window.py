@@ -48,7 +48,7 @@ class MainWindow(QWidget):
         self._control_open = False   # control panel starts collapsed (map unobstructed)
 
         self.setWindowTitle("Lite Ground Station — Desktop")
-        self.resize(1320, 820)
+        self.resize(1280, 720)   # match the target handheld screen (landscape)
         self.setMinimumSize(460, 320)
         self.setStyleSheet(theme.STYLESHEET)
 
@@ -186,7 +186,7 @@ class MainWindow(QWidget):
         right_top = max(ctrl_w, bw)
 
         # connection card — floats top-centre over the map while disconnected.
-        if self._conn_bar.isVisible():
+        if not self._connected:
             cb_w = min(self._conn_bar.sizeHint().width(), w - 2 * m)
             cb_h = self._conn_bar.sizeHint().height()
             self._conn_bar.setGeometry((w - cb_w) // 2, m, cb_w, cb_h)

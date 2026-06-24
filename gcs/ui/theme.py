@@ -95,7 +95,7 @@ QPushButton {{
     background-color: {PANEL_HI};
     border: 1px solid {PANEL_BORDER};
     border-radius: 8px;
-    padding: 8px 12px;
+    padding: 9px 14px;          /* comfortable touch target on the handheld */
     font-weight: 600;
 }}
 QPushButton:hover {{ background-color: #232c37; border-color: #3a4654; }}
@@ -115,12 +115,13 @@ QPushButton#Mode {{ font-size: 15px; padding: 12px 8px; }}
 QPushButton#Connect {{ background-color: #238636; color: #ffffff; border: none; padding: 8px 18px; }}
 QPushButton#Connect:hover {{ background-color: #2ea043; }}
 
-/* small square icon button (refresh, zoom, swap…) */
+/* small square icon button (refresh, zoom, swap…) — sized for a finger tap */
 QPushButton#IconButton {{
     padding: 6px;
-    min-width: 30px;
+    min-width: 36px;
+    min-height: 36px;
     border-radius: 8px;
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 700;
 }}
 /* quiet "ghost" button used on chips/overlays */
@@ -222,9 +223,12 @@ QFrame#TopBar {{
 }}
 QFrame#TopBar QLabel {{ color: {TEXT_DIM}; }}
 QFrame#TopBar QLabel#ConnLabel {{ color: {TEXT}; font-weight: 600; }}
-QFrame#TopBar QPushButton {{ padding: 5px 10px; }}
-QFrame#TopBar QPushButton#IconButton {{ min-width: 26px; padding: 4px; font-size: 14px; }}
-QFrame#TopBar QComboBox {{ padding: 4px 8px; }}
+QFrame#TopBar QPushButton {{ padding: 6px 11px; }}
+/* keep the in-pill icon buttons slim so the top strip stays thin */
+QFrame#TopBar QPushButton#IconButton {{
+    min-width: 30px; min-height: 30px; padding: 4px; font-size: 15px;
+}}
+QFrame#TopBar QComboBox {{ padding: 5px 8px; }}
 
 /* ── camera placeholder (font size is set dynamically to match the tile) ── */
 QLabel#CamPlaceholder {{ color: {TEXT_DIM}; }}
