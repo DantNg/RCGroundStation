@@ -77,10 +77,11 @@ QToolTip {{
 }}
 
 /* ── cards ──────────────────────────────────────────────────────────────── */
+/* #Panel is an AcrylicFrame: it paints its own frosted-glass background and
+   border in paintEvent, so the QSS box must stay transparent here. */
 QFrame#Panel {{
-    background-color: rgba(20, 26, 34, 0.94);
-    border: 1px solid {PANEL_BORDER};
-    border-radius: 12px;
+    background-color: transparent;
+    border: none;
 }}
 QLabel#PanelTitle {{
     color: {TEXT_DIM};
@@ -214,10 +215,10 @@ QFrame#ConnChip {{
 QLabel#ConnLabel {{ font-weight: 600; color: {TEXT}; }}
 
 /* ── combined top pill (connection status + active view's controls) ─────── */
+/* #TopBar is an AcrylicFrame too — frosted background/border painted in code. */
 QFrame#TopBar {{
-    background-color: rgba(20, 26, 34, 0.92);
-    border: 1px solid {PANEL_BORDER};
-    border-radius: 12px;
+    background-color: transparent;
+    border: none;
 }}
 QFrame#TopBar QLabel {{ color: {TEXT_DIM}; }}
 QFrame#TopBar QLabel#ConnLabel {{ color: {TEXT}; font-weight: 600; }}

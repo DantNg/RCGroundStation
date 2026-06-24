@@ -6,10 +6,12 @@ ignorant of widget plumbing. Serial ports are enumerated with pyserial.
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QLineEdit,
+from PySide6.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
                                QPushButton, QSpinBox, QStackedWidget, QWidget)
 
 from ..config import AppConfig
+from . import theme
+from .acrylic import AcrylicFrame
 
 _BAUDS = ["9600", "19200", "38400", "57600", "115200", "230400", "921600"]
 
@@ -22,16 +24,29 @@ def _list_serial_ports():
         return []
 
 
-class ConnectionBar(QWidget):
+class ConnectionBar(AcrylicFrame):
     connect_requested = Signal(object)   # AppConfig
     disconnect_requested = Signal()
 
     def __init__(self, cfg: AppConfig, parent=None):
         super().__init__(parent)
+        self.setObjectName("ConnBar")
         self._connected = False
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setContentsMargins(14, 8, 14, 8)
         lay.setSpacing(8)
+
+        # leading status indicator (DJI-style "Disconnected" chip)
+        self._dot = QLabel("●")
+        self._dot.setStyleSheet(f"color: {theme.BAD}; font-size: 13px;")
+        self._status = QLabel("Disconnected")
+        self._status.setStyleSheet("font-weight: 600;")
+        self._vsep = QFrame()
+        self._vsep.setFrameShape(QFrame.VLine)
+        self._vsep.setStyleSheet(f"color: {theme.PANEL_BORDER};")
+        lay.addWidget(self._dot)
+        lay.addWidget(self._status)
+        lay.addWidget(self._vsep)
 
         lay.addWidget(QLabel("Link:"))
         self._type = QComboBox()
@@ -108,6 +123,9 @@ class ConnectionBar(QWidget):
         self._connect_btn.setText("Disconnect" if connected else "Connect")
         self._type.setEnabled(not connected)
         self._stack.setEnabled(not connected)
+        color = theme.GOOD if connected else theme.BAD
+        self._dot.setStyleSheet(f"color: {color}; font-size: 13px;")
+        self._status.setText("Connected" if connected else "Disconnected")
 
     def current_config(self) -> AppConfig:
         kind = ["serial", "udp", "tcp"][self._type.currentIndex()]

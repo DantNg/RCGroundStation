@@ -15,9 +15,10 @@ from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QPushButton,
                                QSizePolicy, QWidget)
 
 from . import theme
+from .acrylic import AcrylicFrame
 
 
-class TopBar(QFrame):
+class TopBar(AcrylicFrame):
     disconnect_requested = Signal()
 
     def __init__(self, parent=None):

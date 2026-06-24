@@ -19,7 +19,7 @@ from PySide6.QtWidgets import QPushButton, QVBoxLayout, QWidget
 
 from ..app.controller import GcsController
 from ..config import AppConfig
-from . import theme
+from . import acrylic, theme
 from .camera_view import CameraView
 from .connection_bar import ConnectionBar
 from .control_panel import ControlPanel
@@ -52,15 +52,18 @@ class MainWindow(QWidget):
         self.setMinimumSize(460, 320)
         self.setStyleSheet(theme.STYLESHEET)
 
+        # frosted-glass bars sample whichever view is currently primary
+        acrylic.set_backdrop_provider(lambda: self._view(self._primary))
+
         root = QVBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(6)
 
-        # connection bar (collapses to a chip once a link is up)
+        # connection bar — a frosted card floating over the map until a link is
+        # up, when it gives way to the slim top pill (added to the stage below)
         self._conn_bar = ConnectionBar(config)
         self._conn_bar.connect_requested.connect(self._on_connect)
         self._conn_bar.disconnect_requested.connect(self._on_disconnect)
-        root.addWidget(self._conn_bar)
 
         # ── fly view: primary base (map/camera) + floating overlays ───────────
         self._map = MapWidget()
@@ -93,7 +96,7 @@ class MainWindow(QWidget):
         self._stage = OverlayStage(self._layout_overlays)
         for w in (self._map, self._camera, self._hud, self._control,
                   self._messages, self._warnings, self._topbar, self._pip_frame,
-                  self._control_toggle):
+                  self._control_toggle, self._conn_bar):
             self._stage.add(w)
         root.addWidget(self._stage, 1)
         self._apply_view_roles()
@@ -132,6 +135,7 @@ class MainWindow(QWidget):
         self._pip_frame.raise_()
         self._topbar.raise_()
         self._control_toggle.raise_()
+        self._conn_bar.raise_()   # the connect card sits above everything
 
     def _swap_views(self) -> None:
         self._primary = self._pip_name()
@@ -180,6 +184,12 @@ class MainWindow(QWidget):
         # what top-edge overlays must keep clear on the right: the open panel,
         # else just the toggle handle.
         right_top = max(ctrl_w, bw)
+
+        # connection card — floats top-centre over the map while disconnected.
+        if self._conn_bar.isVisible():
+            cb_w = min(self._conn_bar.sizeHint().width(), w - 2 * m)
+            cb_h = self._conn_bar.sizeHint().height()
+            self._conn_bar.setGeometry((w - cb_w) // 2, m, cb_w, cb_h)
 
         # combined top pill (connection status + active view's controls) — top-left.
         # On small screens its controls shed their labels and it's capped so it

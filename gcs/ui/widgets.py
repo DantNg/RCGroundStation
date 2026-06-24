@@ -3,13 +3,14 @@ from __future__ import annotations
 
 from PySide6.QtCore import QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
-from PySide6.QtWidgets import (QFrame, QLabel, QSizePolicy, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from . import theme
+from .acrylic import AcrylicFrame
 
 
-class Panel(QFrame):
-    """A titled, bordered container (the app's basic card)."""
+class Panel(AcrylicFrame):
+    """A titled container — a frosted-glass card floating over the fly-view."""
 
     def __init__(self, title: str, parent=None):
         super().__init__(parent)
