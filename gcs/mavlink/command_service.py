@@ -96,6 +96,22 @@ class CommandService:
         except Exception as exc:  # pragma: no cover
             self._error(f"Fly-to failed: {exc}")
 
+    # ── run an uploaded mission (AUTO) ────────────────────────────────────────
+    def start_mission(self) -> None:
+        sink = self._require_link()
+        if sink is None:
+            return
+        if not self._state().mode.armed:
+            self._notify(StatusText(Severity.WARNING,
+                                    "Start mission sent while DISARMED — arm first",
+                                    _now_ms(), True))
+        self._switch_mode(sink, "AUTO", announce=True)
+        try:
+            sink.command_long(mavutil.mavlink.MAV_CMD_MISSION_START, 0.0, 0.0)
+            self._info("Mission start (AUTO)")
+        except Exception as exc:  # pragma: no cover
+            self._error(f"Mission start failed: {exc}")
+
     # ── helpers ───────────────────────────────────────────────────────────────
     def _ensure_guided(self, sink: ICommandSink) -> None:
         """Switch to GUIDED if we aren't already — guided commands need it."""

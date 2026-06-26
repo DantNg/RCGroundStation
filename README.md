@@ -13,36 +13,39 @@ flight modes (LOITER / STAB / ALTH / LAND, +RTL/GUIDED), takeoff, and guided
 ## Features
 
 - **Map-centric fly view** — the satellite map is the workspace (fills the
-  window); a small **circular HUD**, the control panel and the message log float
-  over it as overlays, like a modern GCS fly view.
+  window); a top status bar, a left action rail, a small **circular HUD** and the
+  message log float over it as overlays, like a modern GCS fly view.
 - **Live camera + picture-in-picture switch** — a **webcam view** (Qt
   Multimedia) is a second full-screen-capable view alongside the map. One view
   is primary (fills the window), the other shrinks to a **corner PIP tile**; tap
   the tile (or press **`V`**) to swap which one is the main view. Pick the camera
   device and start/stop the feed from its header strip.
-- **Collapsing connection bar + combined top pill** — once a link is up the
-  whole connection bar **folds into one slim top-left pill** that holds both the
-  **connection status** (green/amber dot + link label + *Disconnect*) and the
-  **active view's controls** (map provider/follow/zoom, or camera device/start),
-  so there's only one small bar to read. On small screens it sheds its labels to
-  stay narrow. Disconnecting brings the full bar back. Press **`F11`** for
-  fullscreen — handy on a small dedicated panel.
-- **Circular attitude HUD** — a round PFD "ball": gradient sky/ground horizon
-  clipped to a circle, roll scale on the bezel, amber boresight, heading box and
-  a tight data strip (mode/arming, ALT·SPD·climb, battery·GPS·link). Everything
-  scales from the widget size and stays glanceable even when small.
+- **Full-width status bar** — a frosted top bar (NASA-ground-station style) with
+  the vehicle name and link dot on the left, and on the right the live
+  **battery / GPS / link** chips, a **flight-mode pill** (click to pick a mode)
+  and an **arm/disarm pill** (green when safe, red when armed). While
+  disconnected the connection card floats as a **centred hero** so the top
+  controls stay clear of it; *Disconnect* lives on the bar once a link is up.
+  Press **`F11`** for fullscreen — handy on a small dedicated panel.
+- **Left action rail** — a vertical strip of big one-tap buttons down the left
+  edge — **LAND · RETURN (RTL) · PAUSE (LOITER) · ACTION (take off)** — that
+  light up when that mode goes live, plus a SINGLE/MULTI selector. Arm/takeoff
+  confirmations guard the dangerous actions.
+- **Circular attitude HUD** — a round PFD "ball" showing only the IMU picture:
+  gradient sky/ground horizon clipped to a circle, roll scale on the bezel, amber
+  boresight, a heading (yaw) box and a single altitude readout. Everything scales
+  from the widget size and stays glanceable even when small.
 - **Responsive** — overlays reposition to the window size and shrink when
   cramped (the message log hides first; the HUD, PIP tile and top pill all scale
   down and the control column narrows), so it works from a wide desktop, down to
   a small **4.3" FullHD** dedicated panel (Qt high-DPI scaling), down to a
   **~480×272** panel. The primary view always stays the focus.
-- **Control panel (collapsible)** — hidden by default so it never covers the
-  map; a small **handle at the top-right** (or the **`C`** key) slides it out on
-  demand. It holds one **`ARM`/`DISARM` toggle** that recolours and relabels
-  itself from the live armed state (green ARM ↔ red DISARM), with a *Force*
-  option and an arm confirmation; a **`TAKEOFF`** button (prompts for altitude,
-  auto-switches to GUIDED); and a compact **flight-mode picker** (a combobox +
-  `SET MODE`) that follows the vehicle's live mode from incoming HEARTBEATs.
+- **Arm · mode · takeoff from the chrome** — the **arm/disarm pill** and
+  **flight-mode pill** on the status bar, and the **action rail** on the left
+  (LAND/RETURN/PAUSE/take off), all follow the vehicle's live armed state and
+  mode from incoming HEARTBEATs and announce intent to the command service. Arm
+  and takeoff prompt for confirmation; takeoff prompts for an altitude and
+  auto-switches to GUIDED.
 - **Telemetry stream requests** — on connect the GCS asks the vehicle to stream
   `ATTITUDE` (the HUD horizon), position and status (via `REQUEST_DATA_STREAM` +
   `SET_MESSAGE_INTERVAL`), re-requesting periodically. Without this a real
@@ -60,6 +63,28 @@ flight modes (LOITER / STAB / ALTH / LAND, +RTL/GUIDED), takeoff, and guided
 - **Satellite map** — Web-Mercator XYZ tiles (Esri imagery by default, OSM
   street as an option) with a heading-rotated drone marker, breadcrumb trail,
   follow/pan/zoom, and an on-disk tile cache.
+- **3D globe** — a **`3D`** toggle in the map bar swaps the 2D tiles for a
+  **CesiumJS** globe (in a `QWebEngineView`) draped with the same Esri imagery,
+  so no Cesium ion token is needed. The vehicle, the waypoint mission and the
+  simulation all render in 3D with altitude; *Follow* tracks the vehicle/sim.
+  Cesium is **vendored** under `gcs/ui/assets/cesium/` and served by a localhost
+  HTTP server, so the 3D engine works **offline** — only the satellite imagery
+  needs the network, exactly like the 2D map.
+- **Waypoint mission** — toggle **`✎ WP`** then click the map to drop numbered
+  waypoints, drag to move them, right-click/double-click to delete, and set a
+  per-waypoint altitude. The dashed route, leg lengths and total distance show on
+  the 2D map and as 3D points with altitude poles on the globe. One shared
+  mission backs both views, so an edit in either updates both.
+- **Flight simulation (preview)** — **`▶ Sim`** flies a green marker along the
+  planned route at a chosen groundspeed (5–40 m/s) on both the 2D and 3D maps —
+  a local visual preview of the path; it commands nothing on the vehicle.
+- **Upload & fly the mission** — **Plan → Upload to vehicle** turns the planned
+  waypoints into a real ArduCopter mission (home · take-off · waypoints) and
+  sends it over the MAVLink MISSION protocol (`MISSION_COUNT` →
+  `MISSION_ITEM_INT` → `MISSION_ACK`); **Start mission (AUTO)** switches the
+  vehicle to AUTO and runs it (`MAV_CMD_MISSION_START`). Both are guarded by a
+  confirmation, and the on-touch waypoint editor (tap a point → set altitude /
+  delete) makes the route editable with a finger on a touchscreen.
 - **Links** — Serial (USB telemetry radio), UDP (SITL / the ESP32's WiFi
   forward / the bundled simulator), or TCP (SITL).
 
@@ -69,7 +94,7 @@ flight modes (LOITER / STAB / ALTH / LAND, +RTL/GUIDED), takeoff, and guided
 gcs/
   domain/      telemetry value objects + flight-mode tables   (pure data, no I/O)
   interfaces/  ITelemetryLink (read) + ICommandSink (write)    (DIP / ISP ports)
-  mavlink/     PymavlinkLink, TelemetryDecoder, CommandService (the only pymavlink code)
+  mavlink/     PymavlinkLink, TelemetryDecoder, CommandService, MissionService (pymavlink)
   app/         TelemetryStore (mutex), LinkManager (worker thread), GcsController (root)
   ui/          HUD, panels, map, connection bar, MainWindow     (passive Qt views)
   config.py    persisted connection settings

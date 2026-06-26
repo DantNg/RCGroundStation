@@ -2,6 +2,9 @@
 # Python 3.10+
 # Webcam view uses Qt Multimedia (QtMultimedia / QtMultimediaWidgets), which
 # ships inside the standard PySide6 wheel — no extra package required.
+# The 3D map embeds a CesiumJS globe in a QWebEngineView — QtWebEngine ships in
+# the full PySide6 wheel (PySide6-Addons), so install "PySide6", not the
+# slimmer "PySide6-Essentials".
 PySide6>=6.6
 pymavlink>=2.4.40
 pyserial>=3.5

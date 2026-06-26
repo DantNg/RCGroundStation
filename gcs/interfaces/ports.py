@@ -82,3 +82,16 @@ class ICommandSink(ABC):
     @abstractmethod
     def send_heartbeat(self) -> None:
         """Announce this GCS to the vehicle (keeps GCS-failsafe timers happy)."""
+
+    # ── mission upload primitives (MISSION protocol) ─────────────────────────
+    # Default no-ops so a minimal sink need not implement the mission protocol;
+    # PymavlinkLink overrides them. The handshake (counting, per-item requests,
+    # the final ACK) is driven by gcs.mavlink.mission_service.MissionService.
+    def mission_count(self, count: int, mission_type: int = 0) -> None:
+        """Announce a mission of ``count`` items (kicks off the upload)."""
+
+    def mission_item_int(self, seq: int, frame: int, command: int, current: int,
+                         autocontinue: int, p1: float, p2: float, p3: float,
+                         p4: float, lat_i: int, lon_i: int, alt: float,
+                         mission_type: int = 0) -> None:
+        """Send one MISSION_ITEM_INT in response to the vehicle's request."""

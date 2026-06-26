@@ -2,8 +2,10 @@
 
 Designed to float over the map in the autonomous fly-view: small, glanceable,
 self-contained. It clips the gradient horizon to a circle, wraps it in a bezel
-with a roll scale, and prints a tight data strip below (mode / arming, then
-ALT·SPD·HDG, then battery·GPS·link). Everything scales from the widget size.
+with a roll scale, and shows only the IMU/attitude picture — roll & pitch from
+the ball, yaw in the heading box, plus a single altitude readout below. The
+remaining vehicle status (mode, arming, battery, GPS, link) lives in the top
+status bar, so this instrument stays purely an artificial horizon.
 """
 from __future__ import annotations
 
@@ -78,8 +80,8 @@ class RoundHud(QWidget):
         p.setBrush(QBrush(QColor(13, 17, 23)))
         p.drawRoundedRect(QRectF(0.5, 0.5, w - 1, h - 1), 10 * s, 10 * s)
 
-        line_h = int(15 * s)
-        strip_h = line_h * 3 + int(8 * s)
+        line_h = int(16 * s)
+        strip_h = line_h + int(8 * s)   # one line: altitude only
         avail = h - strip_h
         R = max(20.0, min(w, avail) / 2.0 - 4 * s)
         cx = w / 2.0
@@ -89,7 +91,7 @@ class RoundHud(QWidget):
         self._draw_bezel_and_roll(p, cx, cy, R, s)
         self._draw_boresight(p, cx, cy, s)
         self._draw_heading_box(p, cx, cy, R, s)
-        self._draw_strip(p, w, h - strip_h, strip_h, line_h, s)
+        self._draw_alt(p, w, h - strip_h, strip_h, s)
         if not self._valid:
             self._draw_no_data(p, cx, cy, R, s)
         p.end()
@@ -210,47 +212,15 @@ class RoundHud(QWidget):
         p.setFont(hf)
         p.drawText(rect, Qt.AlignCenter, f"{int(round(self._heading)) % 360:03d}")
 
-    def _draw_strip(self, p, w, y, strip_h, line_h, s) -> None:
-        x = int(6 * s)
-        # Size the text to the row height (in pixels) so it shrinks with the HUD
-        # instead of bottoming out at a fixed point size and overflowing.
-        f_mode = QFont("Segoe UI")
-        f_mode.setBold(True)
-        f_mode.setPixelSize(max(8, int(line_h * 0.92)))
+    def _draw_alt(self, p, w, y, strip_h, s) -> None:
+        """A single altitude readout under the ball (the only non-IMU value)."""
         f = QFont("Consolas")
-        f.setPixelSize(max(7, int(line_h * 0.82)))
-
-        # line 1: mode + arming
-        p.setFont(f_mode)
-        p.setPen(QPen(theme.HUD_CYAN))
-        p.drawText(QRectF(x, y, w * 0.6, line_h), Qt.AlignVCenter | Qt.AlignLeft, self._mode)
-        p.setPen(QPen(QColor(theme.BAD if self._armed else theme.GOOD)))
-        p.drawText(QRectF(w * 0.45, y, w - x - w * 0.45, line_h),
-                   Qt.AlignVCenter | Qt.AlignRight, "ARMED" if self._armed else "DISARMED")
-
-        # line 2: ALT / SPD / climb
+        f.setBold(True)
+        f.setPixelSize(max(9, int(strip_h * 0.62)))
         p.setFont(f)
-        p.setPen(QPen(theme.HUD_TEXT))
-        p.drawText(QRectF(x, y + line_h, w - 2 * x, line_h), Qt.AlignVCenter | Qt.AlignLeft,
-                   f"ALT {self._alt:.0f}m  SPD {self._airspeed:.1f}  {self._climb:+.1f}")
-
-        # line 3: battery / gps / link (coloured)
-        y3 = y + 2 * line_h
-        batt = (f"{self._batt_v:.1f}V" +
-                (f" {self._batt_pct}%" if self._batt_pct >= 0 else ""))
-        bcol = (theme.HUD_TEXT_DIM if self._batt_pct < 0 else
-                QColor(theme.BAD) if self._batt_pct < 20 else
-                QColor(theme.WARN) if self._batt_pct < 40 else QColor(theme.GOOD))
-        gcol = QColor(theme.GOOD if self._gps_fix >= 3 else
-                      theme.WARN if self._gps_fix == 2 else theme.BAD)
-        p.setPen(QPen(bcol))
-        p.drawText(QRectF(x, y3, w * 0.42, line_h), Qt.AlignVCenter | Qt.AlignLeft, batt)
-        p.setPen(QPen(gcol))
-        p.drawText(QRectF(w * 0.40, y3, w * 0.34, line_h), Qt.AlignVCenter | Qt.AlignLeft,
-                   f"{self._fix_label()} {self._gps_sats}")
-        p.setPen(QPen(QColor(theme.GOOD if self._link_up else theme.BAD)))
-        p.drawText(QRectF(w * 0.72, y3, w * 0.28 - x, line_h),
-                   Qt.AlignVCenter | Qt.AlignRight, "LINK" if self._link_up else "NO LINK")
+        p.setPen(QPen(theme.HUD_TEXT_DIM))
+        p.drawText(QRectF(0, y, w, strip_h), Qt.AlignCenter,
+                   f"ALT  {self._alt:.0f} m")
 
     def _draw_no_data(self, p, cx, cy, R, s) -> None:
         p.setBrush(QBrush(QColor(0, 0, 0, 120)))

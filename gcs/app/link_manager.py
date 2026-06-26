@@ -32,6 +32,13 @@ class LinkManager:
         self._link: Optional[ITelemetryLink] = None
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
+        self._observer: Optional[Callable[[object], None]] = None
+
+    def set_observer(self, observer: Optional[Callable[[object], None]]) -> None:
+        """Register a callback fed every incoming message (e.g. the mission
+        protocol handler). Runs on the link-worker thread — keep it quick and
+        thread-safe."""
+        self._observer = observer
 
     @property
     def link(self) -> Optional[ITelemetryLink]:
@@ -114,6 +121,11 @@ class LinkManager:
                     self._decoder.handle(msg)
                 except Exception:
                     errors += 1
+                if self._observer is not None:
+                    try:
+                        self._observer(msg)
+                    except Exception:
+                        pass
                 if not announced and link.target[0] != 0:
                     announced = True
                     sysid, _ = link.target

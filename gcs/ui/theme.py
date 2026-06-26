@@ -232,4 +232,70 @@ QFrame#TopBar QComboBox {{ padding: 5px 8px; }}
 
 /* ── camera placeholder (font size is set dynamically to match the tile) ── */
 QLabel#CamPlaceholder {{ color: {TEXT_DIM}; }}
+
+/* ── full-width top status bar (battery · GPS · link · mode · arming) ────── */
+QFrame#StatusBar {{ background-color: transparent; border: none; }}
+QFrame#StatusBar QLabel {{ color: {TEXT}; }}
+/* the global "QWidget {{ background-color }}" would otherwise paint opaque dark
+   boxes behind these text labels over the frosted bar — keep them transparent
+   (the chips opt back in to their own translucent pill via #StatChip). */
+QLabel#Vehicle, QLabel#ViewTag, QLabel#ConnDot {{ background: transparent; }}
+QLabel#Vehicle {{ font-size: 15px; font-weight: 700; }}
+QLabel#ViewTag {{ color: {TEXT_DIM}; font-weight: 600; letter-spacing: 0.5px; }}
+/* status chips (battery / gps / rc-link) — value pills on the right */
+QLabel#StatChip {{
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 9px;
+    padding: 4px 10px;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-weight: 700;
+}}
+/* mode pill — click to pick a flight mode */
+QPushButton#ModePill {{
+    background-color: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 14px;
+    padding: 6px 16px;
+    font-weight: 700;
+}}
+QPushButton#ModePill:hover {{ background-color: rgba(255, 255, 255, 0.13); }}
+/* arming pill — green when safe to arm, red when armed/hot */
+QPushButton#ArmPill {{
+    background-color: rgba(63, 185, 80, 0.18);
+    border: 1px solid rgba(63, 185, 80, 0.55);
+    color: #7ee48a;
+    border-radius: 14px; padding: 6px 16px; font-weight: 800;
+}}
+QPushButton#ArmPill:hover {{ background-color: rgba(63, 185, 80, 0.30); }}
+QPushButton#DisarmPill {{
+    background-color: rgba(255, 93, 82, 0.20);
+    border: 1px solid rgba(255, 93, 82, 0.60);
+    color: #ff9089;
+    border-radius: 14px; padding: 6px 16px; font-weight: 800;
+}}
+QPushButton#DisarmPill:hover {{ background-color: rgba(255, 93, 82, 0.32); }}
+QPushButton#ArmPill:disabled, QPushButton#DisarmPill:disabled,
+QPushButton#ModePill:disabled {{
+    color: #555e6b; background-color: rgba(255,255,255,0.03);
+    border-color: rgba(255,255,255,0.06);
+}}
+
+/* ── left mode/action rail (LAND · RETURN · PAUSE · ACTION · SINGLE/MULTI) ─ */
+QFrame#ModeRail {{ background-color: transparent; border: none; }}
+QPushButton#RailBtn {{
+    background-color: rgba(20, 26, 34, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 8px 4px;
+    color: {TEXT};
+    font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+}}
+QPushButton#RailBtn:hover {{
+    background-color: rgba(36, 44, 56, 0.75); border-color: rgba(255,255,255,0.16);
+}}
+QPushButton#RailBtn:checked {{
+    background-color: {ACCENT2}; border-color: {ACCENT2}; color: #061a33;
+}}
+QPushButton#RailBtn:disabled {{ color: #4b5360; background-color: rgba(20,26,34,0.4); }}
 """

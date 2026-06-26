@@ -1,11 +1,13 @@
-"""Main window — map/camera fly view with floating instrument overlays.
+"""Main window — map/camera fly view with a NASA-style instrument layout.
 
-For autonomous work the **primary view is the workspace**: either the satellite
-map or the live camera fills the window, while a small circular HUD, the control
-panel and the message log float on top and warnings surface over it. The view
-that isn't primary shrinks into a corner picture-in-picture tile; tapping it (or
-pressing ``V``) swaps the two. Once a link is up the connection bar collapses
-into a slim status chip so the view gets the whole window.
+The workspace (satellite map or live camera) fills the window. Floating over it:
+a **full-width status bar** at the top (vehicle · battery · GPS · link · mode ·
+arm/disarm), a **left action rail** of one-tap flight modes (LAND · RETURN ·
+PAUSE · ACTION), a small **round attitude HUD** (IMU + altitude), the camera
+**picture-in-picture** tile, the message log, on-map warning banners, and a
+corner **dock** with the active view's own controls (map provider/3D/Plan/zoom or
+camera device/start). While disconnected the connection card floats as a centred
+hero so the top controls stay clear of it.
 
 This is the only object that knows about :class:`GcsController`; a ~25 Hz timer
 polls the store, feeds the passive overlays and drains notices into the log +
@@ -15,19 +17,19 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QInputDialog, QMessageBox, QVBoxLayout, QWidget
 
 from ..app.controller import GcsController
 from ..config import AppConfig
 from . import acrylic, theme
 from .camera_view import CameraView
 from .connection_bar import ConnectionBar
-from .control_panel import ControlPanel
 from .map_widget import MapWidget
 from .messages_panel import MessagesPanel
+from .mode_rail import ModeRail
 from .overlay_stage import OverlayStage
 from .round_hud import RoundHud
-from .top_bar import TopBar
+from .top_bar import ControlDock, StatusBar
 from .warning_overlay import WarningOverlay
 from .widgets import PipOverlay
 
@@ -45,10 +47,10 @@ class MainWindow(QWidget):
         self._config = config
         self._connected = False
         self._primary = "map"   # "map" | "cam"
-        self._control_open = False   # control panel starts collapsed (map unobstructed)
+        self._last_takeoff_alt = 10.0
 
         self.setWindowTitle("Lite Ground Station — Desktop")
-        self.resize(1280, 720)   # match the target handheld screen (landscape)
+        self.resize(1280, 720)
         self.setMinimumSize(460, 320)
         self.setStyleSheet(theme.STYLESHEET)
 
@@ -59,8 +61,7 @@ class MainWindow(QWidget):
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(6)
 
-        # connection bar — a frosted card floating over the map until a link is
-        # up, when it gives way to the slim top pill (added to the stage below)
+        # connection card — a frosted hero floating over the map until a link is up
         self._conn_bar = ConnectionBar(config)
         self._conn_bar.connect_requested.connect(self._on_connect)
         self._conn_bar.disconnect_requested.connect(self._on_disconnect)
@@ -69,45 +70,40 @@ class MainWindow(QWidget):
         self._map = MapWidget()
         self._camera = CameraView()
         self._hud = RoundHud()
-        self._control = ControlPanel()
         self._messages = MessagesPanel()
         self._warnings = WarningOverlay()
-        self._topbar = TopBar()
-        self._topbar.attach_controls(self._map.controls_widget(),
-                                     self._camera.header_widget())
+        self._status = StatusBar()
+        self._rail = ModeRail()
+        self._dock = ControlDock()
+        self._dock.attach_controls(self._map.controls_widget(),
+                                   self._camera.header_widget())
         self._pip_frame = PipOverlay()
 
-        # control is collapsed by default; a small handle expands it on demand
-        self._control.setVisible(False)
-        self._control_toggle = QPushButton("⚙")
-        self._control_toggle.setObjectName("IconButton")
-        self._control_toggle.setToolTip("Show controls — arm · mode · takeoff (C)")
-        self._control_toggle.setCursor(Qt.PointingHandCursor)
-        self._control_toggle.clicked.connect(self._toggle_control)
-
-        self._control.arm_requested.connect(self._controller.commands.arm)
-        self._control.disarm_requested.connect(self._controller.commands.disarm)
-        self._control.mode_requested.connect(self._controller.commands.set_mode_by_name)
-        self._control.takeoff_requested.connect(self._controller.commands.takeoff)
+        # wiring: status bar + rail announce intent; the controller executes it
+        self._status.arm_requested.connect(self._on_arm)
+        self._status.disarm_requested.connect(self._controller.commands.disarm)
+        self._status.mode_requested.connect(self._controller.commands.set_mode_by_name)
+        self._status.disconnect_requested.connect(self._on_disconnect)
+        self._rail.mode_requested.connect(self._controller.commands.set_mode_by_name)
+        self._rail.takeoff_requested.connect(self._on_takeoff)
         self._map.fly_to_requested.connect(self._controller.commands.fly_to)
-        self._topbar.disconnect_requested.connect(self._on_disconnect)
+        self._map.mission_upload_requested.connect(self._controller.mission.upload)
+        self._map.mission_start_requested.connect(self._on_start_mission)
         self._pip_frame.clicked.connect(self._swap_views)
 
         self._stage = OverlayStage(self._layout_overlays)
-        for w in (self._map, self._camera, self._hud, self._control,
-                  self._messages, self._warnings, self._topbar, self._pip_frame,
-                  self._control_toggle, self._conn_bar):
+        for w in (self._map, self._camera, self._hud, self._messages,
+                  self._warnings, self._status, self._rail, self._dock,
+                  self._pip_frame, self._conn_bar):
             self._stage.add(w)
         root.addWidget(self._stage, 1)
         self._apply_view_roles()
 
-        # keyboard: V swaps views, C toggles controls, F11 fullscreen, Esc leaves it
+        # keyboard: V swaps views, F11 fullscreen, Esc leaves it
         QShortcut(QKeySequence("V"), self, activated=self._swap_views)
-        QShortcut(QKeySequence("C"), self, activated=self._toggle_control)
         QShortcut(QKeySequence("F11"), self, activated=self._toggle_fullscreen)
         QShortcut(QKeySequence("Esc"), self, activated=self._exit_fullscreen)
 
-        # refresh timer
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
         self._timer.start(int(1000 / _REFRESH_HZ))
@@ -124,17 +120,15 @@ class MainWindow(QWidget):
         primary = self._view(self._primary)
         pip = self._view(self._pip_name())
 
-        self._topbar.set_active(self._primary)   # show the primary view's controls
+        self._dock.set_active(self._primary)   # show the primary view's controls
         self._pip_frame.set_caption("MAP" if pip is self._map else "CAM")
 
-        # back-to-front: primary, instruments, warnings, pip, pip frame, pill, toggle
         primary.lower()
-        for ov in (self._hud, self._control, self._messages, self._warnings):
+        for ov in (self._hud, self._messages, self._warnings, self._rail, self._dock):
             ov.raise_()
         pip.raise_()
         self._pip_frame.raise_()
-        self._topbar.raise_()
-        self._control_toggle.raise_()
+        self._status.raise_()
         self._conn_bar.raise_()   # the connect card sits above everything
 
     def _swap_views(self) -> None:
@@ -142,13 +136,6 @@ class MainWindow(QWidget):
         if self._primary == "cam":
             self._camera.ensure_started()
         self._apply_view_roles()
-        self._relayout()
-
-    def _toggle_control(self) -> None:
-        """Expand/collapse the control panel (it stays hidden so the map is clear)."""
-        self._control_open = not self._control_open
-        self._control_toggle.setText("✕" if self._control_open else "⚙")
-        self._control.setVisible(self._control_open)
         self._relayout()
 
     # ── overlay placement (called from the stage's resizeEvent) ───────────────
@@ -165,47 +152,20 @@ class MainWindow(QWidget):
         primary.setGeometry(0, 0, w, h)
         primary.setVisible(True)
 
-        # control toggle — a small handle pinned to the top-right corner. The
-        # control panel itself stays hidden so it never covers the map; the user
-        # taps the handle (or presses C) to slide it out below the handle.
-        bw = self._control_toggle.sizeHint().width()
-        bh = self._control_toggle.sizeHint().height()
-        self._control_toggle.setGeometry(w - bw - m, m, bw, bh)
+        # ── full-width status bar across the top ─────────────────────────────
+        self._status.set_compact(small)
+        sb_h = self._status.sizeHint().height()
+        self._status.setGeometry(m, m, w - 2 * m, sb_h)
+        content_top = m + sb_h + m
 
-        cw = 140 if tiny else (168 if small else 198)
-        ctrl_w = 0
-        if self._control_open:
-            self._control.set_compact(small)
-            self._control.setFixedWidth(cw)
-            ctrl_top = m + bh + m
-            ch = min(self._control.sizeHint().height(), h - ctrl_top - m)
-            self._control.setGeometry(w - cw - m, ctrl_top, cw, ch)
-            ctrl_w = cw
-        # what top-edge overlays must keep clear on the right: the open panel,
-        # else just the toggle handle.
-        right_top = max(ctrl_w, bw)
+        # ── left action rail (below the status bar, top-aligned) ─────────────
+        rail_w = self._rail.sizeHint().width()
+        rail_h = min(self._rail.sizeHint().height(), h - content_top - m)
+        self._rail.setGeometry(m, content_top, rail_w, rail_h)
+        rail_right = m + rail_w
+        rail_bottom = content_top + rail_h
 
-        # connection card — floats top-centre over the map while disconnected.
-        if not self._connected:
-            cb_w = min(self._conn_bar.sizeHint().width(), w - 2 * m)
-            cb_h = self._conn_bar.sizeHint().height()
-            self._conn_bar.setGeometry((w - cb_w) // 2, m, cb_w, cb_h)
-
-        # combined top pill (connection status + active view's controls) — top-left.
-        # On small screens its controls shed their labels and it's capped so it
-        # never slides under the right-hand controls.
-        self._topbar.set_compact(small)
-        self._map.set_controls_compact(small)
-        self._camera.set_header_compact(small)
-        tb_max = max(180, w - right_top - 3 * m)
-        tb_w = min(self._topbar.sizeHint().width(), w - 2 * m, tb_max)
-        tb_h = self._topbar.sizeHint().height()
-        self._topbar.setGeometry(m, m, tb_w, tb_h)
-        tb_right = m + tb_w
-
-        # PIP tile — top-left below the pill; shrinks with the window, never hidden
-        pip_x = m
-        pip_y = m + tb_h + m
+        # ── camera PIP — top-right, below the status bar ─────────────────────
         prop = 0.20 if tiny else (0.22 if small else 0.24)
         pip_w = int(_clamp(w * prop, 92, 300))
         pip_h = int(pip_w * 9 / 16)
@@ -213,28 +173,34 @@ class MainWindow(QWidget):
         if pip_h > max_pip_h:
             pip_h = max_pip_h
             pip_w = int(pip_h * 16 / 9)
+        pip_x = w - pip_w - m
+        pip_y = content_top
         pip.setVisible(True)
         self._pip_frame.setVisible(True)
         pip.setGeometry(pip_x, pip_y, pip_w, pip_h)
         self._pip_frame.setGeometry(pip_x, pip_y, pip_w, pip_h)
-        pip_bottom = pip_y + pip_h
 
-        # round HUD — bottom-left, scaled down on small panels and kept clear of
-        # the PIP above it (so it shrinks instead of overlapping).
-        hud_prop = 0.20 if tiny else (0.24 if small else 0.28)
-        hud_floor = 84 if tiny else (110 if small else 150)
-        avail_hud = h - m - (pip_bottom + m)
-        hud_sz = int(_clamp(min(w * hud_prop, h * 0.40), hud_floor, 240))
-        hud_h = hud_sz + 52
+        # ── map/camera controls dock — bottom-right corner ───────────────────
+        self._map.set_controls_compact(small)
+        self._camera.set_header_compact(small)
+        dock_w = min(self._dock.sizeHint().width(), w - rail_right - 2 * m)
+        dock_h = self._dock.sizeHint().height()
+        dock_x = w - dock_w - m
+        dock_y = h - dock_h - m
+        self._dock.setGeometry(dock_x, dock_y, dock_w, dock_h)
+
+        # ── round attitude HUD — bottom-left, kept clear of the rail above ───
+        hud_sz = int(_clamp(min(w * 0.22, h * 0.34), 84 if tiny else 110, 220))
+        hud_h = hud_sz + int(28)
+        avail_hud = h - m - (rail_bottom + m)
         if hud_h > avail_hud:
-            hud_h = max(100, avail_hud)
-            hud_sz = max(80, min(hud_sz, hud_h - 52))
+            hud_h = max(96, avail_hud)
+            hud_sz = max(72, min(hud_sz, hud_h - 28))
         self._hud.setGeometry(m, h - hud_h - m, hud_sz, hud_h)
 
-        # message log — bottom strip between HUD and control. Kept on roomy
-        # screens; hidden once the window shrinks (small) so the view stays clear.
+        # ── message log — bottom strip between the HUD and the dock ──────────
         msg_left = m + hud_sz + m
-        msg_right = w - ctrl_w - 2 * m
+        msg_right = dock_x - m
         msg_w = msg_right - msg_left
         msg_h = int(_clamp(h * 0.22, 90, 150))
         if msg_w >= 240 and not small:
@@ -243,13 +209,55 @@ class MainWindow(QWidget):
         else:
             self._messages.setVisible(False)
 
-        # warning banners — top band, centred between the top pill and the right controls
-        warn_l = max(tb_right, pip_x + pip_w) + m
-        warn_r = w - right_top - 2 * m
+        # ── warning banners — top band between the rail and the PIP ──────────
+        warn_l = rail_right + m
+        warn_r = pip_x - m
         avail = max(0, warn_r - warn_l)
         warn_w = int(_clamp(min(avail, 600), 200, 600)) if avail > 200 else max(avail, 120)
         warn_x = warn_l + max(0, (avail - warn_w) // 2)
-        self._warnings.setGeometry(warn_x, m, warn_w, int(_clamp(h * 0.4, 120, 200)))
+        self._warnings.setGeometry(warn_x, content_top, warn_w,
+                                   int(_clamp(h * 0.4, 120, 200)))
+
+        # ── connection card — centred hero while disconnected ────────────────
+        if not self._connected:
+            cb_w = min(self._conn_bar.sizeHint().width(), w - 2 * m)
+            cb_h = self._conn_bar.sizeHint().height()
+            cb_y = max(content_top, (h - cb_h) // 2)
+            self._conn_bar.setGeometry((w - cb_w) // 2, cb_y, cb_w, cb_h)
+
+    # ── commands (with confirmations) ────────────────────────────────────────
+    def _on_arm(self, force: bool) -> None:
+        if self._confirm("Arm the vehicle?",
+                         "The motors may spin. Make sure the area is clear."):
+            self._controller.commands.arm(force)
+
+    def _on_takeoff(self) -> None:
+        alt, ok = QInputDialog.getDouble(
+            self, "Takeoff", "Target altitude (m above home):",
+            self._last_takeoff_alt, 1.0, 1000.0, 1)
+        if not ok:
+            return
+        if not self._confirm("Take off?",
+                             f"Vehicle will arm-check, switch to GUIDED and climb to "
+                             f"{alt:.0f} m. Make sure the area is clear."):
+            return
+        self._last_takeoff_alt = alt
+        self._controller.commands.takeoff(alt)
+
+    def _on_start_mission(self) -> None:
+        if self._confirm("Start mission?",
+                         "The vehicle will switch to AUTO and fly the uploaded "
+                         "mission. Make sure it is armed and the area is clear."):
+            self._controller.commands.start_mission()
+
+    def _confirm(self, title: str, text: str) -> bool:
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle(title)
+        box.setText(text)
+        box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        box.setDefaultButton(QMessageBox.No)
+        return box.exec() == QMessageBox.Yes
 
     # ── connection ───────────────────────────────────────────────────────────
     def _on_connect(self, cfg: AppConfig) -> None:
@@ -265,11 +273,11 @@ class MainWindow(QWidget):
     def _set_connected(self, connected: bool) -> None:
         self._connected = connected
         self._conn_bar.set_connected(connected)
-        self._conn_bar.setVisible(not connected)   # collapse the bar → top pill
-        self._topbar.set_connected(connected)
+        self._conn_bar.setVisible(not connected)
+        self._status.set_connected(connected)
         if connected:
-            self._topbar.set_state(False, self._config.label())
-        self._control.set_connected(connected)
+            self._status.set_label(self._config.label())
+        self._rail.set_connected(connected)
         self._map.set_connected(connected)
         self._relayout()
 
@@ -287,15 +295,15 @@ class MainWindow(QWidget):
     def _tick(self) -> None:
         snap = self._controller.snapshot()
         self._hud.update_from(snap)
-        self._control.update_from(snap)
         self._map.update_from(snap)
         if self._connected:
-            self._topbar.set_state(snap.link.link_up, self._config.label())
+            self._status.update_from(snap)
+            self._rail.update_from(snap)
 
         for notice in self._controller.drain_notices():
             self._messages.add(notice)
             if MessagesPanel.is_alert(notice):
-                self._warnings.push(notice)   # surface it prominently over the view
+                self._warnings.push(notice)
         self._warnings.prune()
 
     # ── lifecycle ───────────────────────────────────────────────────────────

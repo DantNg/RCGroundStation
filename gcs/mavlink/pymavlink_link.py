@@ -130,9 +130,18 @@ class PymavlinkLink(ITelemetryLink, ICommandSink):
             )
 
     def set_mode(self, base_mode: int, custom_mode: int) -> None:
-        sys, _ = self._require_target()
+        sys, comp = self._require_target()
         with self._send_lock:
+            # legacy SET_MODE (what Mission Planner sends; ArduPilot honours it)
             self._conn.mav.set_mode_send(sys, base_mode, custom_mode)
+            # belt-and-suspenders: MAV_CMD_DO_SET_MODE (what QGC/PX4 prefer), so a
+            # mode switch lands regardless of which path the firmware listens on
+            try:
+                self._conn.mav.command_long_send(
+                    sys, comp, mavutil.mavlink.MAV_CMD_DO_SET_MODE, 0,
+                    float(base_mode), float(custom_mode), 0, 0, 0, 0, 0)
+            except Exception:
+                pass
 
     # type_mask with every bit set except the three position bits → "use
     # position only" (ignore velocity, acceleration, yaw and yaw-rate).
@@ -151,6 +160,30 @@ class PymavlinkLink(ITelemetryLink, ICommandSink):
                 0.0, 0.0, 0.0,          # acceleration
                 0.0, 0.0,               # yaw, yaw_rate
             )
+
+    # ── mission upload primitives ────────────────────────────────────────────
+    def mission_count(self, count: int, mission_type: int = 0) -> None:
+        sys, comp = self._require_target()
+        with self._send_lock:
+            try:
+                self._conn.mav.mission_count_send(sys, comp, count, mission_type)
+            except TypeError:   # older pymavlink without the mission_type arg
+                self._conn.mav.mission_count_send(sys, comp, count)
+
+    def mission_item_int(self, seq: int, frame: int, command: int, current: int,
+                         autocontinue: int, p1: float, p2: float, p3: float,
+                         p4: float, lat_i: int, lon_i: int, alt: float,
+                         mission_type: int = 0) -> None:
+        sys, comp = self._require_target()
+        with self._send_lock:
+            try:
+                self._conn.mav.mission_item_int_send(
+                    sys, comp, seq, frame, command, current, autocontinue,
+                    p1, p2, p3, p4, lat_i, lon_i, alt, mission_type)
+            except TypeError:
+                self._conn.mav.mission_item_int_send(
+                    sys, comp, seq, frame, command, current, autocontinue,
+                    p1, p2, p3, p4, lat_i, lon_i, alt)
 
     def send_heartbeat(self) -> None:
         conn = self._conn

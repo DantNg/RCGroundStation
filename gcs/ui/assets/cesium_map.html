@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GCS 3D Map</title>
+  <!--
+    3D map for the Lite Ground Station. Cesium is vendored under assets/cesium/
+    and served by a localhost HTTP server (CesiumView), so the 3D engine works
+    fully offline — only the satellite imagery (same ESRI World Imagery as the 2D
+    map, no Cesium ion token) needs the network. Python drives this page through
+    the window.gcs* functions below and receives edit events back through the
+    QWebChannel "bridge" object.
+  -->
+  <script>window.CESIUM_BASE_URL = "cesium/";</script>
+  <script src="cesium/Cesium.js"></script>
+  <link href="cesium/Widgets/widgets.css" rel="stylesheet" />
+  <script src="qwebchannel.js"></script>
+  <style>
+    html, body, #cesiumContainer { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #0a0d12; }
+    #status {
+      position: absolute; left: 8px; top: 8px; z-index: 10;
+      font: 12px "Consolas", monospace; color: #e6edf3;
+      background: rgba(8,12,18,0.7); padding: 4px 8px; border-radius: 6px;
+      pointer-events: none;
+    }
+    #fatal {
+      position: absolute; inset: 0; z-index: 20; display: none;
+      align-items: center; justify-content: center; text-align: center;
+      flex-direction: column; gap: 10px; padding: 24px;
+      font: 14px "Segoe UI", sans-serif; color: #e6edf3;
+      background: rgba(10,13,18,0.92);
+    }
+    #fatal b { font-size: 18px; color: #ff8a82; }
+    #fatal span { color: #9fb1bf; max-width: 520px; }
+    /* trim Cesium's default chrome we don't need */
+    .cesium-widget-credits { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+  <div id="status">loading…</div>
+  <div id="fatal"><b id="fatalTitle">3D map error</b><span id="fatalMsg"></span></div>
+  <script>
+  "use strict";
+
+  // Colours depend on Cesium, so they are assigned in initViewer() — never at the
+  // top level, where a failed CDN load would throw before the error handlers
+  // (below) are even registered and leave the user with a silent black screen.
+  let ACCENT, ROUTE, WPFILL, SIM;
+
+  let viewer, vehicle, sim;
+  let wpEntities = [];
+  let editMode = false;
+  let followMode = false;
+  let haveFix = false;
+  let bridge = null;
+  let dragIdx = -1;
+
+  function status(t) {
+    document.getElementById("status").textContent = t;
+    console.log("[gcs] " + t);
+  }
+
+  function fatal(title, msg) {
+    document.getElementById("fatalTitle").textContent = title;
+    document.getElementById("fatalMsg").textContent = msg || "";
+    document.getElementById("fatal").style.display = "flex";
+    console.log("[gcs] FATAL: " + title + " — " + msg);
+  }
+
+  window.onerror = function (m, src, line) {
+    fatal("3D map error", m + "  (" + (src || "") + ":" + (line || 0) + ")");
+    return false;
+  };
+  window.addEventListener("unhandledrejection", function (e) {
+    fatal("3D map error", "" + (e.reason && e.reason.message ? e.reason.message : e.reason));
+  });
+
+  function webglSupported() {
+    try {
+      const c = document.createElement("canvas");
+      return !!(window.WebGLRenderingContext &&
+                (c.getContext("webgl") || c.getContext("experimental-webgl")));
+    } catch (_) { return false; }
+  }
+
+  // A small top-down arrow used as the vehicle/sim billboard (rotates by heading).
+  function arrowImage(css) {
+    const c = document.createElement("canvas");
+    c.width = c.height = 48;
+    const g = c.getContext("2d");
+    g.translate(24, 24);
+    g.beginPath();
+    g.moveTo(0, -18); g.lineTo(12, 14); g.lineTo(0, 6); g.lineTo(-12, 14);
+    g.closePath();
+    g.fillStyle = css; g.fill();
+    g.lineWidth = 2; g.strokeStyle = "#0d1117"; g.stroke();
+    return c.toDataURL();
+  }
+  const VEHICLE_IMG = arrowImage("#ffb000");
+  const SIM_IMG = arrowImage("#3fb950");
+
+  // World-space "up" axis for a marker pointing at the given compass heading.
+  // Feeding this to billboard.alignedAxis makes the arrow follow the real-world
+  // heading and rotate correctly as the camera is orbited (a screen-space
+  // billboard.rotation alone stays fixed on screen when the view turns).
+  function headingAxis(lon, lat, alt, headingDeg) {
+    const pos = Cesium.Cartesian3.fromDegrees(lon, lat, Math.max(0, alt));
+    const enu = Cesium.Transforms.eastNorthUpToFixedFrame(pos);
+    const h = Cesium.Math.toRadians(headingDeg);
+    const local = new Cesium.Cartesian3(Math.sin(h), Math.cos(h), 0);  // E, N, U
+    const dir = Cesium.Matrix4.multiplyByPointAsVector(enu, local, new Cesium.Cartesian3());
+    return Cesium.Cartesian3.normalize(dir, dir);
+  }
+
+  function initViewer() {
+    document.getElementById("fatal").style.display = "none";  // clear any false alarm
+    ACCENT = Cesium.Color.fromCssColorString("#ffb000");   // vehicle / amber
+    ROUTE  = Cesium.Color.fromCssColorString("#4c9bff");   // planned route
+    WPFILL = Cesium.Color.fromCssColorString("#ffd24d");   // waypoint dots
+    SIM    = Cesium.Color.fromCssColorString("#3fb950");   // simulation marker
+
+    viewer = new Cesium.Viewer("cesiumContainer", {
+      baseLayerPicker: false, geocoder: false, homeButton: false,
+      sceneModePicker: false, navigationHelpButton: false, animation: false,
+      timeline: false, fullscreenButton: false, infoBox: false,
+      selectionIndicator: false,
+      // ESRI World Imagery (same source as the 2D map); {z}/{y}/{x} == level/row/col
+      baseLayer: new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        maximumLevel: 19,
+      })),
+      // flat ellipsoid — no ion terrain token needed; waypoint altitude still 3D
+      terrain: new Cesium.Terrain(new Cesium.EllipsoidTerrainProvider()),
+    });
+    viewer.scene.globe.enableLighting = false;
+    viewer.scene.skyAtmosphere.show = true;
+
+    vehicle = viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(105.8048, 21.0285, 0),
+      billboard: { image: VEHICLE_IMG, scale: 0.7,
+                   verticalOrigin: Cesium.VerticalOrigin.CENTER, rotation: 0,
+                   disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      show: false,
+    });
+
+    setupPicking();
+
+    // a pleasant oblique starting view
+    viewer.camera.setView({
+      destination: Cesium.Cartesian3.fromDegrees(105.8048, 21.0235, 1200),
+      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-45), roll: 0 },
+    });
+
+    new QWebChannel(qt.webChannelTransport, function (channel) {
+      bridge = channel.objects.bridge;
+      status("ready");
+    });
+    status("ready");
+  }
+
+  // ── interaction: add (click ground), drag (move), double-click (remove) ─────
+  function pickLonLat(windowPos) {
+    const ray = viewer.camera.getPickRay(windowPos);
+    const cart = viewer.scene.globe.pick(ray, viewer.scene);
+    if (!cart) return null;
+    const c = Cesium.Cartographic.fromCartesian(cart);
+    return { lat: Cesium.Math.toDegrees(c.latitude), lon: Cesium.Math.toDegrees(c.longitude) };
+  }
+
+  function pickedWaypoint(windowPos) {
+    const picked = viewer.scene.pick(windowPos);
+    if (picked && picked.id && picked.id._wpIndex !== undefined) return picked.id._wpIndex;
+    return -1;
+  }
+
+  function setupPicking() {
+    const h = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+
+    // Cesium's own double-click flies-to / tracks the entity, which reads as an
+    // unwanted zoom; we use double-click to delete a waypoint instead.
+    viewer.screenSpaceEventHandler.removeInputAction(
+      Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+
+    h.setInputAction(function (e) {
+      if (!editMode) return;
+      const idx = pickedWaypoint(e.position);
+      if (idx >= 0) {                       // start dragging an existing waypoint
+        dragIdx = idx;
+        viewer.scene.screenSpaceCameraController.enableInputs = false;
+      }
+    }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+
+    h.setInputAction(function (e) {
+      if (dragIdx >= 0) {
+        const ll = pickLonLat(e.endPosition);
+        if (ll && bridge) bridge.move_waypoint(dragIdx, ll.lat, ll.lon);
+        return;
+      }
+      // While hovering a waypoint in edit mode, disable globe zoom so the mouse
+      // wheel tunes the waypoint's altitude instead of zooming the camera.
+      const overWp = editMode && pickedWaypoint(e.endPosition) >= 0;
+      viewer.scene.screenSpaceCameraController.enableZoom = !overWp;
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+    h.setInputAction(function () {
+      dragIdx = -1;
+      viewer.scene.screenSpaceCameraController.enableInputs = true;
+    }, Cesium.ScreenSpaceEventType.LEFT_UP);
+
+    h.setInputAction(function (e) {        // tap a waypoint → edit popup; empty → add
+      if (!editMode) return;
+      const idx = pickedWaypoint(e.position);
+      if (idx >= 0) { if (bridge) bridge.select_waypoint(idx); return; }
+      const ll = pickLonLat(e.position);
+      if (ll && bridge) bridge.add_waypoint(ll.lat, ll.lon);
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+    // scroll over a waypoint (edit mode) → change its altitude instead of zooming
+    viewer.scene.canvas.addEventListener("wheel", function (e) {
+      if (!editMode) return;
+      const idx = pickedWaypoint(new Cesium.Cartesian2(e.offsetX, e.offsetY));
+      if (idx < 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const step = (e.shiftKey ? 1 : 5) * (e.deltaY < 0 ? 1 : -1);
+      if (bridge) bridge.adjust_waypoint_alt(idx, step);
+    }, { passive: false, capture: true });
+  }
+
+  // ── Python → JS API (window.gcs*) ───────────────────────────────────────────
+  window.gcsSetVehicle = function (lat, lon, alt, heading, fix) {
+    if (!viewer) return;
+    haveFix = !!fix;
+    vehicle.show = haveFix;
+    if (!haveFix) return;
+    const a = Math.max(0, alt);
+    vehicle.position = Cesium.Cartesian3.fromDegrees(lon, lat, a);
+    vehicle.billboard.alignedAxis = headingAxis(lon, lat, a, heading);
+  };
+
+  window.gcsSetWaypoints = function (json) {
+    if (!viewer) return;
+    const wps = (typeof json === "string") ? JSON.parse(json) : json;
+    wpEntities.forEach((e) => viewer.entities.remove(e));
+    wpEntities = [];
+    wps.forEach(function (w, i) {
+      // the waypoint marker at altitude
+      const e = viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(w.lon, w.lat, w.alt),
+        point: { pixelSize: 13, color: WPFILL, outlineColor: Cesium.Color.BLACK,
+                 outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+        label: { text: (i + 1) + "  " + w.alt.toFixed(0) + " m",
+                 font: "bold 13px Consolas", fillColor: Cesium.Color.WHITE,
+                 showBackground: true,
+                 backgroundColor: Cesium.Color.fromCssColorString("#0d1117").withAlpha(0.8),
+                 horizontalOrigin: Cesium.HorizontalOrigin.LEFT,
+                 verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                 pixelOffset: new Cesium.Cartesian2(12, -10),
+                 disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      });
+      e._wpIndex = i;
+      wpEntities.push(e);
+      // a vertical pole from the ground up to the waypoint to convey altitude
+      const pole = viewer.entities.add({
+        polyline: {
+          positions: Cesium.Cartesian3.fromDegreesArrayHeights(
+            [w.lon, w.lat, 0, w.lon, w.lat, w.alt]),
+          width: 1.5, material: WPFILL.withAlpha(0.5),
+        },
+      });
+      wpEntities.push(pole);
+    });
+    // the planned route polyline through the waypoints at their heights
+    if (wps.length >= 2) {
+      const coords = [];
+      wps.forEach((w) => coords.push(w.lon, w.lat, w.alt));
+      const route = viewer.entities.add({
+        polyline: {
+          positions: Cesium.Cartesian3.fromDegreesArrayHeights(coords),
+          width: 3,
+          material: new Cesium.PolylineGlowMaterialProperty({ glowPower: 0.2, color: ROUTE }),
+        },
+      });
+      wpEntities.push(route);
+    }
+  };
+
+  window.gcsSetSim = function (lat, lon, alt, heading) {
+    if (!viewer) return;
+    if (!sim) {
+      sim = viewer.entities.add({
+        billboard: { image: SIM_IMG, scale: 0.8,
+                     verticalOrigin: Cesium.VerticalOrigin.CENTER,
+                     disableDepthTestDistance: Number.POSITIVE_INFINITY },
+        point: { pixelSize: 6, color: SIM, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      });
+    }
+    sim.show = true;
+    const a = Math.max(0, alt);
+    sim.position = Cesium.Cartesian3.fromDegrees(lon, lat, a);
+    sim.billboard.alignedAxis = headingAxis(lon, lat, a, heading);
+    if (followMode) viewer.camera.lookAtTransform(
+      Cesium.Transforms.eastNorthUpToFixedFrame(sim.position.getValue(Cesium.JulianDate.now())),
+      new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-35), 600));
+  };
+
+  window.gcsClearSim = function () {
+    if (!viewer) return;
+    if (sim) sim.show = false;
+    viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);   // release any lock
+  };
+
+  window.gcsSetEdit = function (on) {
+    editMode = !!on;
+    if (viewer && !editMode) viewer.scene.screenSpaceCameraController.enableZoom = true;
+    status(editMode
+      ? "edit: tap empty=add · tap point=edit/delete · drag=move"
+      : "ready");
+  };
+
+  window.gcsSetFollow = function (on) { followMode = !!on; };
+
+  window.gcsFlyToVehicle = function () {
+    if (!viewer || !haveFix) return;
+    viewer.flyTo(vehicle, { offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-45), 800) });
+  };
+
+  function startup() {
+    if (!webglSupported()) {
+      fatal("WebGL is not available",
+            "Your graphics driver / QtWebEngine GPU process has no working WebGL, " +
+            "so the 3D globe cannot render. Try updating the GPU driver, or run with " +
+            "software rendering (the app already requests a SwiftShader fallback).");
+      return;
+    }
+    try {
+      initViewer();
+    } catch (err) {
+      fatal("3D map failed to start", "" + (err && err.message ? err.message : err));
+    }
+  }
+
+  // Cesium is served from the local HTTP server and loads almost instantly, but
+  // poll briefly in case the script element hasn't finished executing yet.
+  function boot() {
+    let tries = 0;
+    (function wait() {
+      if (window.Cesium) { startup(); return; }
+      if (tries++ > 80) {
+        fatal("Cesium failed to load",
+              "The bundled 3D engine under assets/cesium/ could not be loaded by " +
+              "the local server. Reinstall the app files, then toggle 3D off and on.");
+        return;
+      }
+      if (tries === 1 || tries % 10 === 0) status("loading 3D engine…");
+      setTimeout(wait, 100);
+    })();
+  }
+  boot();
+  </script>
+</body>
+</html>

@@ -14,6 +14,7 @@ from typing import List
 from ..domain.telemetry import Severity, StatusText, TelemetrySnapshot, _now_ms
 from ..interfaces.ports import ITelemetryLink
 from ..mavlink.command_service import CommandService
+from ..mavlink.mission_service import MissionService
 from ..mavlink.pymavlink_link import PymavlinkLink
 from .link_manager import LinkManager
 from .store import TelemetryStore
@@ -29,6 +30,12 @@ class GcsController:
             state_provider=self.store.snapshot,
             notify=self._post_notice,
         )
+        self.mission = MissionService(
+            link_provider=lambda: self._link_manager.link,
+            notify=self._post_notice,
+        )
+        # feed the mission protocol every incoming message (MISSION_REQUEST/ACK)
+        self._link_manager.set_observer(self.mission.on_message)
 
     # ── connection lifecycle ──────────────────────────────────────────────────
     def connect(self, connection_string: str, baud: int, label: str = "") -> None:
