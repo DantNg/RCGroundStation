@@ -152,6 +152,11 @@ QLabel#ConnLabel { font-weight: 600; color: #e6edf3; }
    do luật "QWidget { background-color }" ở trên. */
 QFrame#ConnBar { background-color: transparent; border: none; }
 QFrame#ConnBar QLabel { background: transparent; color: #8b97a7; }
+/* các container (QStackedWidget + trang serial/udp/tcp) cũng phải trong suốt,
+   nếu không chúng tạo một dải tối sau nhóm Cổng/Baud. Chỉ nhắm container trực
+   tiếp (> QWidget) để KHÔNG chạm nền tối cố ý của các ô combo/spinbox/lineedit. */
+QFrame#ConnBar QStackedWidget { background: transparent; }
+QFrame#ConnBar QStackedWidget > QWidget { background: transparent; }
 
 /* control dock (acrylic) */
 QFrame#TopBar { background-color: transparent; border: none; }
