@@ -147,6 +147,12 @@ QFrame#ConnChip {
 }
 QLabel#ConnLabel { font-weight: 600; color: #e6edf3; }
 
+/* thẻ kết nối (acrylic) — thanh này tự vẽ nền kính mờ trong paintEvent, nên QSS
+   phải giữ trong suốt; và các nhãn con phải trong suốt để không hiện hộp đen đục
+   do luật "QWidget { background-color }" ở trên. */
+QFrame#ConnBar { background-color: transparent; border: none; }
+QFrame#ConnBar QLabel { background: transparent; color: #8b97a7; }
+
 /* control dock (acrylic) */
 QFrame#TopBar { background-color: transparent; border: none; }
 QFrame#TopBar QLabel { color: #8b97a7; }
