@@ -8,7 +8,9 @@
 
 #include "app/link_manager.h"
 #include "app/store.h"
+#include "domain/roles.h"
 #include "domain/telemetry.h"
+#include "interfaces/authority_sink.h"
 #include "mavlink/command_service.h"
 #include "mavlink/mission_service.h"
 
@@ -21,7 +23,11 @@ namespace gcs::app {
 
 class GcsController {
 public:
-    GcsController();
+    // Vai trò quyết định quyền của bản dựng này (mặc định: trạm mặt đất/admin).
+    explicit GcsController(domain::Role role = domain::Role::GroundStationAdmin);
+
+    domain::Role role() const { return m_role; }
+    domain::Authority authority() const { return m_authority; }
 
     // ── vòng đời kết nối ──────────────────────────────────────────────────────
     void connect(const QString &connectionString, int baud, const QString &label = QString());
@@ -35,13 +41,24 @@ public:
     mavlink::CommandService &commands() { return *m_commands; }
     mavlink::MissionService &mission() { return *m_mission; }
 
+    // Sink lệnh ĐÃ GÁC QUYỀN, đang sống (hoặc nullptr khi chưa kết nối). Mọi
+    // tiêu thụ gửi lệnh trực tiếp (vd chính sách bắt bám) đều qua đây, nên quyền
+    // được thực thi thống nhất ở một chỗ.
+    interfaces::ICommandSink *commandSink()
+    {
+        return m_linkManager.commandSink() ? &m_guardedSink : nullptr;
+    }
+
 private:
     void postNotice(const domain::StatusText &st);
 
+    domain::Role m_role;
+    domain::Authority m_authority;
     TelemetryStore m_store;
     std::mutex m_noticesMutex;
     std::deque<domain::StatusText> m_notices;
     LinkManager m_linkManager;
+    interfaces::AuthorityGuardedSink m_guardedSink;
     std::unique_ptr<mavlink::CommandService> m_commands;
     std::unique_ptr<mavlink::MissionService> m_mission;
 };

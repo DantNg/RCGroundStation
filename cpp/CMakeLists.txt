@@ -35,6 +35,8 @@ set(SOURCES
     src/domain/flight_modes.cpp
     src/domain/mission.cpp
 
+    src/interfaces/authority_sink.cpp
+
     src/mavlink/mavlink_link.cpp
     src/mavlink/decoder.cpp
     src/mavlink/command_service.cpp
@@ -44,7 +46,13 @@ set(SOURCES
     src/app/link_manager.cpp
     src/app/controller.cpp
 
+    src/vision/motion_detector.cpp
+    src/vision/centroid_tracker.cpp
+    src/vision/centering_policy.cpp
+    src/vision/vision_pipeline.cpp
+
     src/ui/theme.cpp
+    src/ui/video_display.cpp
     src/ui/acrylic.cpp
     src/ui/widgets.cpp
     src/ui/overlay_stage.cpp

@@ -8,15 +8,28 @@ using domain::Severity;
 using domain::StatusText;
 using domain::nowMs;
 
-GcsController::GcsController()
-    : m_linkManager(&m_store, [this](const StatusText &st) { postNotice(st); })
+GcsController::GcsController(domain::Role role)
+    : m_role(role),
+      m_authority(domain::Authority::of(role)),
+      m_linkManager(&m_store, [this](const StatusText &st) { postNotice(st); }),
+      m_guardedSink(
+          [this] { return m_linkManager.commandSink(); },
+          m_authority,
+          [this] {
+              postNotice(StatusText(Severity::Warning,
+                  QStringLiteral("Thiếu quyền điều khiển — vai trò: %1")
+                      .arg(domain::roleLabel(m_role)),
+                  nowMs(), true));
+          })
 {
+    // Mọi đường lệnh đi qua sink đã gác quyền (commandSink()), không phải link
+    // thô — nhờ vậy phân quyền được thực thi ở đúng một chỗ.
     m_commands = std::make_unique<mavlink::CommandService>(
-        [this] { return m_linkManager.commandSink(); },
+        [this] { return commandSink(); },
         [this] { return m_store.snapshot(); },
         [this](const StatusText &st) { postNotice(st); });
     m_mission = std::make_unique<mavlink::MissionService>(
-        [this] { return m_linkManager.commandSink(); },
+        [this] { return commandSink(); },
         [this](const StatusText &st) { postNotice(st); });
     // nạp giao thức nhiệm vụ mỗi tin đến (MISSION_REQUEST/ACK)
     m_linkManager.setObserver([this](const MavMessage &msg) { m_mission->onMessage(msg); });

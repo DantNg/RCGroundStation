@@ -29,6 +29,29 @@ Multimedia**, và quả cầu Cesium 3D chạy trong **Qt WebEngine** (dùng l�
 - **Qt WebEngine** (tuỳ chọn — cho bản đồ 3D). Nếu thiếu, chế độ 3D hiện
   placeholder còn phần còn lại vẫn chạy đầy đủ.
 
+## Build nhanh (script tự động)
+
+Hai script tự dò Qt, Ninja và toolchain; ghi đè bằng biến `QT_PREFIX` / `MINGW_DIR`
+(hoặc `-QtPrefix` / `-MingwDir` trên PowerShell) nếu cài ở nơi khác.
+
+```bash
+# Linux / Raspberry Pi — và cả Windows qua Git Bash / MSYS2
+./build.sh              # cấu hình + build Release
+./build.sh --clean      # dựng lại từ đầu
+./build.sh --run        # build xong chạy luôn
+./build.sh --debug -j 4 # build Debug, 4 luồng
+```
+
+```bat
+:: Windows — cmd.exe
+build.bat               # cấu hình + build Release
+build.bat --clean       # dựng lại từ đầu
+build.bat --run         # build xong chạy luôn
+build.bat --debug -j 4  # build Debug, 4 luồng
+```
+
+Muốn tự tay từng bước thì xem hai mục dưới.
+
 ## Build trên Linux / Raspberry Pi
 
 ```bash

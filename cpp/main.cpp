@@ -5,6 +5,7 @@
 // phỏng ở cửa sổ thứ hai và kết nối qua UDP cổng 14550.
 #include "app/controller.h"
 #include "config.h"
+#include "domain/roles.h"
 #include "ui/main_window.h"
 
 #include <QApplication>
@@ -33,7 +34,7 @@ int main(int argc, char *argv[])
     app.setApplicationDisplayName(QStringLiteral("Trạm Điều Khiển Mặt Đất — Desktop"));
 
     gcs::AppConfig config = gcs::AppConfig::load();
-    gcs::app::GcsController controller;
+    gcs::app::GcsController controller(gcs::domain::roleFromString(config.role));
     gcs::ui::MainWindow window(&controller, config);
     window.setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
     window.show();

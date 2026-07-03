@@ -16,6 +16,10 @@ struct AppConfig {
     QString tcpHost = QStringLiteral("127.0.0.1");
     int tcpPort = 5760;
 
+    // Vai trò của bản dựng này trong hệ phân cấp: "admin" | "controller" |
+    // "viewer". Quyết định quyền điều khiển (xem domain/roles.h).
+    QString role = QStringLiteral("admin");
+
     // Chuỗi/nhãn kết nối cho transport đã chọn.
     QString connectionString() const;
     QString label() const;

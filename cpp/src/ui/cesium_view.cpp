@@ -226,7 +226,7 @@ CesiumView::CesiumView(QWidget *parent) : CesiumViewBase(parent)
         QStringLiteral("Chế độ 3D không khả dụng trong bản dựng này\n(thiếu Qt WebEngine)."));
     lbl->setAlignment(Qt::AlignCenter);
     lbl->setWordWrap(true);
-    lbl->setStyleSheet(QStringLiteral("color:#8b97a7; background:#0a0d12; font-size:14px;"));
+    lbl->setStyleSheet(QStringLiteral("color:#aab6c4; background:#0a0d12; font-size:14px;"));
     lay->setContentsMargins(0, 0, 0, 0);
     lay->addWidget(lbl);
 }

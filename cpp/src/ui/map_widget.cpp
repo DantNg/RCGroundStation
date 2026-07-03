@@ -254,7 +254,7 @@ void MapCanvas::drawMission(QPainter &p, double ox, double oy, int z)
         pts.emplace_back(px - ox, py - oy);
     }
     if (pts.size() >= 2) {
-        p.setPen(QPen(QColor("#4c9bff"), 2, Qt::DashLine));
+        p.setPen(QPen(QColor("#5aa6ff"), 2, Qt::DashLine));
         for (size_t i = 1; i < pts.size(); ++i)
             p.drawLine(pts[i - 1], pts[i]);
     }
@@ -312,11 +312,11 @@ void MapCanvas::drawSim(QPainter &p, double ox, double oy, int z)
     p.translate(sx, sy);
     p.rotate(sp.heading);
     p.setPen(QPen(QColor("#0d1117"), 2));
-    p.setBrush(QBrush(QColor("#3fb950")));
+    p.setBrush(QBrush(QColor("#4cc463")));
     p.drawPolygon(QPolygonF({QPointF(0, -12), QPointF(8, 9), QPointF(0, 4), QPointF(-8, 9)}));
     p.restore();
     p.setFont(QFont("Consolas", 8));
-    p.setPen(QPen(QColor("#3fb950")));
+    p.setPen(QPen(QColor("#4cc463")));
     p.drawText(QPointF(sx + 12, sy - 6), QStringLiteral("SIM %1m").arg(sp.alt, 0, 'f', 0));
 }
 

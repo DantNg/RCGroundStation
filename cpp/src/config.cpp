@@ -48,6 +48,7 @@ AppConfig AppConfig::load()
     if (o.contains("udp_port"))        cfg.udpPort = o.value("udp_port").toInt(cfg.udpPort);
     if (o.contains("tcp_host"))        cfg.tcpHost = o.value("tcp_host").toString(cfg.tcpHost);
     if (o.contains("tcp_port"))        cfg.tcpPort = o.value("tcp_port").toInt(cfg.tcpPort);
+    if (o.contains("role"))            cfg.role = o.value("role").toString(cfg.role);
     return cfg;
 }
 
@@ -61,6 +62,7 @@ void AppConfig::save() const
     o["udp_port"] = udpPort;
     o["tcp_host"] = tcpHost;
     o["tcp_port"] = tcpPort;
+    o["role"] = role;
     QFile f(configPath());
     if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
         f.write(QJsonDocument(o).toJson(QJsonDocument::Indented));

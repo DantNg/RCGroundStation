@@ -1,6 +1,7 @@
 #include "ui/main_window.h"
 
 #include "app/controller.h"
+#include "domain/roles.h"
 #include "ui/acrylic.h"
 #include "ui/camera_view.h"
 #include "ui/connection_bar.h"
@@ -32,7 +33,8 @@ double clampd(double v, double lo, double hi) { return v < lo ? lo : (v > hi ? h
 MainWindow::MainWindow(app::GcsController *controller, AppConfig config)
     : m_controller(controller), m_config(std::move(config))
 {
-    setWindowTitle(QStringLiteral("Trạm Điều Khiển Mặt Đất — Desktop"));
+    setWindowTitle(QStringLiteral("Trạm Điều Khiển Mặt Đất — %1")
+                       .arg(domain::roleLabel(m_controller->role())));
     resize(1280, 720);
     setMinimumSize(460, 320);
     setStyleSheet(theme::stylesheet());
@@ -50,6 +52,8 @@ MainWindow::MainWindow(app::GcsController *controller, AppConfig config)
 
     m_map = new MapWidget;
     m_camera = new CameraView;
+    // Chính sách bắt bám lấy sink lệnh sống mỗi khung (nullptr khi chưa kết nối).
+    m_camera->setCommandSinkProvider([this] { return m_controller->commandSink(); });
     m_hud = new RoundHud;
     m_messages = new MessagesPanel;
     m_warnings = new WarningOverlay;
@@ -89,6 +93,18 @@ MainWindow::MainWindow(app::GcsController *controller, AppConfig config)
     new QShortcut(QKeySequence(QStringLiteral("V")), this, [this] { swapViews(); });
     new QShortcut(QKeySequence(QStringLiteral("F11")), this, [this] { toggleFullscreen(); });
     new QShortcut(QKeySequence(Qt::Key_Escape), this, [this] { exitFullscreen(); });
+    new QShortcut(QKeySequence(QStringLiteral("M")), this, [this] {
+        m_showMessages = !m_showMessages;   // bật/tắt panel nhật ký tin nhắn
+        relayout();
+    });
+
+    // Phân quyền ở tầng UI (phòng thủ nhiều lớp): vai trò không được điều khiển
+    // thì giấu luôn các affordance điều khiển. Sink đã gác quyền vẫn là chốt chặn
+    // cuối cùng nếu vì lý do gì đó lệnh vẫn được phát.
+    if (!m_controller->authority().canControl) {
+        m_rail->hide();
+        m_dock->hide();
+    }
 
     m_timer = new QTimer(this);
     connect(m_timer, &QTimer::timeout, this, &MainWindow::tick);
@@ -197,7 +213,7 @@ void MainWindow::layoutOverlays(int w, int h)
     const int msgRight = dockX - m;
     const int msgW = msgRight - msgLeft;
     const int msgH = int(clampd(h * 0.22, 90, 150));
-    if (msgW >= 240 && !small) {
+    if (m_showMessages && msgW >= 240 && !small) {
         m_messages->setGeometry(msgLeft, h - msgH - m, msgW, msgH);
         m_messages->setVisible(true);
     } else {

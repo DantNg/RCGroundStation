@@ -10,9 +10,9 @@ namespace gcs::ui::acrylic {
 namespace {
 constexpr double kBlurDownscale = 0.18;
 constexpr int kRefreshMs = 90;
-const QColor kTint(8, 12, 18, 140);
-const QColor kTintSolid(18, 24, 32, 232);
-const QColor kBorder(255, 255, 255, 28);
+const QColor kTint(8, 12, 18, 168);
+const QColor kTintSolid(18, 24, 32, 236);
+const QColor kBorder(255, 255, 255, 40);
 
 std::function<QWidget *()> g_backdropProvider;
 

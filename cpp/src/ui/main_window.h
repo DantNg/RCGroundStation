@@ -61,6 +61,7 @@ private:
     app::GcsController *m_controller;
     AppConfig m_config;
     bool m_connected = false;
+    bool m_showMessages = false;   // panel nhật ký tắt mặc định (phím M để bật)
     QString m_primary = QStringLiteral("map");
     double m_lastTakeoffAlt = 10.0;
 

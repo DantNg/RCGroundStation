@@ -1,5 +1,13 @@
 #include "ui/camera_view.h"
 
+#include "domain/telemetry.h"
+#include "interfaces/vision.h"
+#include "ui/video_display.h"
+#include "vision/centering_policy.h"
+#include "vision/centroid_tracker.h"
+#include "vision/motion_detector.h"
+#include "vision/vision_pipeline.h"
+
 #include <QCamera>
 #include <QCameraDevice>
 #include <QComboBox>
@@ -10,12 +18,22 @@
 #include <QPushButton>
 #include <QStackedLayout>
 #include <QVBoxLayout>
-#include <QVideoWidget>
+#include <QVideoFrame>
+#include <QVideoSink>
 
 namespace gcs::ui {
 
 CameraView::CameraView(QWidget *parent) : QWidget(parent)
 {
+    // Pipeline thị giác: detector (placeholder AI) → tracker → policy gimbal.
+    // Giữ con trỏ policy để bật/tắt gửi lệnh; quyền sở hữu chuyển vào pipeline.
+    auto detector = std::make_unique<vision::MotionDetector>();
+    auto tracker = std::make_unique<vision::CentroidTracker>();
+    auto policy = std::make_unique<vision::CenteringPolicy>();
+    m_policy = policy.get();
+    m_pipeline = std::make_unique<vision::VisionPipeline>(
+        std::move(detector), std::move(tracker), std::move(policy));
+
     auto *outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
     outer->setSpacing(0);
@@ -35,10 +53,13 @@ CameraView::CameraView(QWidget *parent) : QWidget(parent)
     m_stack->addWidget(m_placeholder);
 
     m_session = new QMediaCaptureSession(this);
-    m_video = new QVideoWidget;
-    m_video->setStyleSheet(QStringLiteral("background-color: #05080c;"));
-    m_session->setVideoOutput(m_video);
-    m_stack->addWidget(m_video);
+    m_sink = new QVideoSink(this);
+    m_session->setVideoSink(m_sink);
+    connect(m_sink, &QVideoSink::videoFrameChanged, this, &CameraView::onFrame);
+
+    m_display = new VideoDisplay;
+    m_stack->addWidget(m_display);
+
     m_mediaDevices = new QMediaDevices(this);
     connect(m_mediaDevices, &QMediaDevices::videoInputsChanged, this, &CameraView::refreshDevices);
 
@@ -46,6 +67,13 @@ CameraView::CameraView(QWidget *parent) : QWidget(parent)
 
     refreshDevices();
     showVideo(false);
+}
+
+CameraView::~CameraView() = default;
+
+void CameraView::setCommandSinkProvider(std::function<interfaces::ICommandSink *()> provider)
+{
+    m_sinkProvider = std::move(provider);
 }
 
 QWidget *CameraView::buildHeader()
@@ -71,6 +99,13 @@ QWidget *CameraView::buildHeader()
     refresh->setCursor(Qt::PointingHandCursor);
     connect(refresh, &QPushButton::clicked, this, &CameraView::refreshDevices);
     row->addWidget(refresh);
+
+    m_trackBtn = new QPushButton(QStringLiteral("Bắt bám"));
+    m_trackBtn->setObjectName("Ghost");
+    m_trackBtn->setCursor(Qt::PointingHandCursor);
+    m_trackBtn->setToolTip(QStringLiteral("Bật bám mục tiêu — lái gimbal theo người"));
+    connect(m_trackBtn, &QPushButton::clicked, this, &CameraView::toggleTracking);
+    row->addWidget(m_trackBtn);
 
     m_startBtn = new QPushButton(QStringLiteral("Bật"));
     m_startBtn->setObjectName("Ghost");
@@ -168,8 +203,40 @@ void CameraView::stop()
         m_camera->deleteLater();
         m_camera = nullptr;
     }
+    m_pipeline->reset();
+    m_display->clear();
     setRunning(false);
     m_placeholder->setText(QStringLiteral("Camera tắt"));
+}
+
+void CameraView::onFrame()
+{
+    if (!m_running)
+        return;
+    const QVideoFrame vf = m_sink->videoFrame();
+    QImage img = vf.toImage();
+    if (img.isNull())
+        return;
+    if (img.format() != QImage::Format_RGB32 && img.format() != QImage::Format_ARGB32)
+        img = img.convertToFormat(QImage::Format_RGB32);
+
+    interfaces::VideoFrame frame;
+    frame.image = img;
+    frame.timestampMs = domain::nowMs();
+
+    interfaces::ICommandSink *sink = m_sinkProvider ? m_sinkProvider() : nullptr;
+    const interfaces::TrackResult res = m_pipeline->process(frame, sink);
+
+    m_display->setFrame(img);
+    m_display->setResult(res);
+}
+
+void CameraView::toggleTracking()
+{
+    const bool on = !m_pipeline->trackingEnabled();
+    m_pipeline->setTrackingEnabled(on);
+    m_policy->setEnabled(on);
+    m_trackBtn->setText(on ? QStringLiteral("Đang bám") : QStringLiteral("Bắt bám"));
 }
 
 void CameraView::setRunning(bool running)
@@ -186,8 +253,8 @@ void CameraView::setRunning(bool running)
 
 void CameraView::showVideo(bool show)
 {
-    if (m_video)
-        m_video->setVisible(show);
+    if (m_display)
+        m_display->setVisible(show);
     m_placeholder->setVisible(!show);
 }
 

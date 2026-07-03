@@ -16,13 +16,14 @@ inline constexpr const char *BG = "#0a0e14";
 inline constexpr const char *PANEL = "#141a22";
 inline constexpr const char *PANEL_HI = "#1b232d";
 inline constexpr const char *PANEL_BORDER = "#2a323d";
-inline constexpr const char *TEXT = "#e6edf3";
-inline constexpr const char *TEXT_DIM = "#8b97a7";
-inline constexpr const char *ACCENT = "#ffb000";   // hổ phách
-inline constexpr const char *ACCENT2 = "#4c9bff";  // xanh dương
-inline constexpr const char *GOOD = "#3fb950";     // xanh lá
-inline constexpr const char *BAD = "#ff5d52";      // đỏ
-inline constexpr const char *WARN = "#e3a008";     // hổ phách cảnh báo
+inline constexpr const char *TEXT = "#eef2f7";      // trắng ngà, tương phản cao
+inline constexpr const char *TEXT_DIM = "#aab6c4";  // xám xanh sáng hơn (dễ đọc hơn)
+inline constexpr const char *TEXT_MUTED = "#7c8899"; // chỉ dùng cho chú thích rất phụ
+inline constexpr const char *ACCENT = "#ffb020";   // hổ phách
+inline constexpr const char *ACCENT2 = "#5aa6ff";  // xanh dương
+inline constexpr const char *GOOD = "#4cc463";     // xanh lá
+inline constexpr const char *BAD = "#ff6459";      // đỏ
+inline constexpr const char *WARN = "#f0a92a";     // hổ phách cảnh báo
 
 // ── HUD (bảng màu PFD/EFIS hiện đại) ─────────────────────────────────────────
 inline QColor hudSkyTop()        { return QColor("#0b3a66"); }
