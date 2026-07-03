@@ -2,8 +2,8 @@
 //
 // Phản chiếu bố cục kiểu trạm mặt đất NASA: một chồng nút to (icon+nhãn) dọc mép
 // trái cho các hành động thường dùng khi bay (HẠ CÁNH, VỀ, DỪNG) cộng nút
-// HÀNH ĐỘNG (cất cánh), rồi bộ chọn ĐƠN/ĐA ở dưới. Các nút chế độ ánh xạ tới chế
-// độ bay ArduCopter và sáng lên khi chế độ đó hoạt động (đọc từ HEARTBEAT).
+// HÀNH ĐỘNG (cất cánh). Các nút chế độ ánh xạ tới chế độ bay ArduCopter và sáng
+// lên khi chế độ đó hoạt động (đọc từ HEARTBEAT).
 #pragma once
 
 #include "domain/telemetry.h"
@@ -28,14 +28,12 @@ signals:
     void takeoffRequested();
 
 private:
-    // Nút biểu tượng-trên-nhãn. Truyền QIcon rỗng để chỉ hiện glyph text.
-    QToolButton *makeButton(const QIcon &icon, const QString &glyph, const QString &label);
+    // Nút biểu tượng-trên-nhãn.
+    QToolButton *makeButton(const QIcon &icon, const QString &label);
 
     bool m_connected = false;
     QMap<QString, QToolButton *> m_modeButtons;
     QToolButton *m_actionBtn = nullptr;
-    QToolButton *m_single = nullptr;
-    QToolButton *m_multi = nullptr;
 };
 
 } // namespace gcs::ui

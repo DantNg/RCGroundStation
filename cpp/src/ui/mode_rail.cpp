@@ -3,7 +3,6 @@
 #include "domain/flight_modes.h"
 #include "ui/theme.h"
 
-#include <QButtonGroup>
 #include <QSizePolicy>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -32,7 +31,7 @@ ModeRail::ModeRail(QWidget *parent) : QFrame(parent)
     col->setSpacing(8);
 
     for (const auto &a : actions) {
-        auto *btn = makeButton(theme::railIcon(QString::fromUtf8(a.icon)), QString(), a.label);
+        auto *btn = makeButton(theme::railIcon(QString::fromUtf8(a.icon)), a.label);
         if (a.isTakeoff) {
             connect(btn, &QToolButton::clicked, this, &ModeRail::takeoffRequested);
             btn->setToolTip(QStringLiteral("Cất cánh (arm + GUIDED, hỏi độ cao)"));
@@ -47,41 +46,19 @@ ModeRail::ModeRail(QWidget *parent) : QFrame(parent)
         col->addWidget(btn);
     }
 
-    col->addSpacing(6);
-
-    // bộ chọn đơn/đa phương tiện (chỉ để trang trí — bản này bay một phương tiện)
-    m_single = makeButton(QIcon(), QStringLiteral("◈"), QStringLiteral("ĐƠN"));
-    m_single->setCheckable(true);
-    m_single->setChecked(true);
-    m_multi = makeButton(QIcon(), QStringLiteral("⧉"), QStringLiteral("ĐA"));
-    m_multi->setCheckable(true);
-    m_multi->setEnabled(false);
-    m_multi->setToolTip(QStringLiteral("Điều khiển đa phương tiện không có ở bản này"));
-    auto *grp = new QButtonGroup(this);
-    grp->setExclusive(true);
-    grp->addButton(m_single);
-    grp->addButton(m_multi);
-    col->addWidget(m_single);
-    col->addWidget(m_multi);
-
     setConnected(false);
 }
 
-QToolButton *ModeRail::makeButton(const QIcon &icon, const QString &glyph, const QString &label)
+QToolButton *ModeRail::makeButton(const QIcon &icon, const QString &label)
 {
     auto *btn = new QToolButton;
     btn->setObjectName("RailBtn");
     btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
     btn->setCursor(Qt::PointingHandCursor);
     btn->setFixedSize(62, 56);
-    if (!icon.isNull()) {
-        btn->setIcon(icon);
-        btn->setIconSize(QSize(24, 24));
-        btn->setText(label);
-    } else {
-        // không có PNG: dùng glyph text trên nhãn
-        btn->setText(glyph + QStringLiteral("\n") + label);
-    }
+    btn->setIcon(icon);
+    btn->setIconSize(QSize(24, 24));
+    btn->setText(label);
     return btn;
 }
 
