@@ -30,6 +30,8 @@ qt_standard_project_setup()
 set(SOURCES
     main.cpp
 
+    resources.qrc
+
     src/config.cpp
 
     src/domain/flight_modes.cpp

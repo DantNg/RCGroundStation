@@ -14,6 +14,7 @@ using domain::nowMs;
 
 namespace {
 constexpr int kSafetyArmed = 0x80; // MAV_MODE_FLAG_SAFETY_ARMED
+constexpr int kGcsSystem = 255;    // sysid của trạm mặt đất này (khớp MavlinkLink)
 
 // MAV_RESULT → (chữ, mức độ) cho phản hồi COMMAND_ACK.
 struct ResultInfo { QString text; Severity sev; };
@@ -58,6 +59,13 @@ void TelemetryDecoder::handle(const MavMessage &msg)
     case MAVLINK_MSG_ID_HEARTBEAT: {
         mavlink_heartbeat_t m;
         mavlink_msg_heartbeat_decode(&msg, &m);
+        // Chỉ lấy heartbeat của bộ điều khiển bay thật. Trên một phương tiện có
+        // nhiều thành phần (gimbal, camera, máy tính đồng hành, radio, GCS) cùng
+        // phát heartbeat, nhưng các thành phần này để autopilot = INVALID và
+        // base_mode/custom_mode = 0. Nếu nhận cả chúng thì trạng thái arm/mode
+        // sẽ nhảy qua lại mỗi khi một heartbeat "không phải autopilot" tới.
+        if (m.autopilot == MAV_AUTOPILOT_INVALID || m.type == MAV_TYPE_GCS)
+            break;
         const bool armed = (m.base_mode & kSafetyArmed) != 0;
         m_store->mutate([&](TelemetrySnapshot &s) {
             s.mode.baseMode = m.base_mode;
@@ -165,6 +173,16 @@ void TelemetryDecoder::handle(const MavMessage &msg)
     case MAVLINK_MSG_ID_COMMAND_ACK: {
         mavlink_command_ack_t m;
         mavlink_msg_command_ack_decode(&msg, &m);
+        // Bỏ qua ack gửi cho một GCS khác trên mạng (target_system = 0 nghĩa là
+        // ack dạng ngắn không ghi đích → vẫn nhận).
+        if (m.target_system != 0 && m.target_system != kGcsSystem)
+            break;
+        // Bỏ qua ack của các lệnh "hạ tầng" mà trạm tự gửi định kỳ để xin luồng
+        // telemetry (SET_MESSAGE_INTERVAL lặp mỗi ~5 s). Chúng không phải thao
+        // tác người dùng; nếu autopilot trả KHÔNG HỖ TRỢ/BỊ TỪ CHỐI thì sẽ spam
+        // nhật ký trạng thái.
+        if (m.command == MAV_CMD_SET_MESSAGE_INTERVAL)
+            break;
         const ResultInfo info = resultInfo(m.result);
         StatusText st(info.sev,
                       QStringLiteral("%1: %2").arg(commandName(m.command), info.text),

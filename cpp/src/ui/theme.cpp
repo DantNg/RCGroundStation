@@ -1,6 +1,41 @@
 #include "ui/theme.h"
 
+#include <QPainter>
+
 namespace gcs::theme {
+
+QPixmap tintedPixmap(const QString &resourcePath, const QColor &color)
+{
+    QPixmap src(resourcePath);
+    if (src.isNull())
+        return src;
+    QPixmap out(src.size());
+    out.fill(Qt::transparent);
+    QPainter p(&out);
+    p.drawPixmap(0, 0, src);                                  // hình dạng (alpha)
+    p.setCompositionMode(QPainter::CompositionMode_SourceIn); // giữ alpha, thay màu
+    p.fillRect(out.rect(), color);
+    p.end();
+    out.setDevicePixelRatio(src.devicePixelRatio());
+    return out;
+}
+
+QIcon railIcon(const QString &resourcePath)
+{
+    const QPixmap src(resourcePath);
+    if (src.isNull())
+        return QIcon();
+    QIcon icon;
+    // thường (chưa chọn): mực sáng
+    icon.addPixmap(tintedPixmap(resourcePath, QColor(TEXT)), QIcon::Normal, QIcon::Off);
+    // được chọn: nền xanh sáng nên dùng mực tối cho tương phản
+    const QPixmap dark = tintedPixmap(resourcePath, QColor("#04101f"));
+    icon.addPixmap(dark, QIcon::Normal, QIcon::On);
+    icon.addPixmap(dark, QIcon::Active, QIcon::On);
+    // vô hiệu: xám mờ như QSS
+    icon.addPixmap(tintedPixmap(resourcePath, QColor("#5a6472")), QIcon::Disabled, QIcon::Off);
+    return icon;
+}
 
 QString severityColor(domain::Severity sev)
 {
@@ -214,15 +249,15 @@ QPushButton#ArmPill:disabled, QPushButton#DisarmPill:disabled, QPushButton#ModeP
 
 /* left mode/action rail */
 QFrame#ModeRail { background-color: transparent; border: none; }
-QPushButton#RailBtn {
+QToolButton#RailBtn {
     background-color: rgba(20, 26, 34, 0.62);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 12px; padding: 8px 4px; color: #eef2f7;
+    border-radius: 12px; padding: 6px 2px; color: #eef2f7;
     font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
 }
-QPushButton#RailBtn:hover { background-color: rgba(36, 44, 56, 0.82); border-color: rgba(255,255,255,0.22); }
-QPushButton#RailBtn:checked { background-color: #5aa6ff; border-color: #5aa6ff; color: #04101f; }
-QPushButton#RailBtn:disabled { color: #5a6472; background-color: rgba(20,26,34,0.4); }
+QToolButton#RailBtn:hover { background-color: rgba(36, 44, 56, 0.82); border-color: rgba(255,255,255,0.22); }
+QToolButton#RailBtn:checked { background-color: #5aa6ff; border-color: #5aa6ff; color: #04101f; }
+QToolButton#RailBtn:disabled { color: #5a6472; background-color: rgba(20,26,34,0.4); }
 )QSS");
 }
 

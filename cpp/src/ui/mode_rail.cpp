@@ -1,16 +1,17 @@
 #include "ui/mode_rail.h"
 
 #include "domain/flight_modes.h"
+#include "ui/theme.h"
 
 #include <QButtonGroup>
-#include <QPushButton>
 #include <QSizePolicy>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 namespace gcs::ui {
 
 namespace {
-struct Action { const char *glyph; QString label; QString mode; bool isTakeoff; };
+struct Action { const char *icon; QString label; QString mode; bool isTakeoff; };
 }
 
 ModeRail::ModeRail(QWidget *parent) : QFrame(parent)
@@ -18,12 +19,12 @@ ModeRail::ModeRail(QWidget *parent) : QFrame(parent)
     setObjectName("ModeRail");
     setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
 
-    // (glyph, nhãn, tên-chế-độ) — mode rỗng nghĩa là "cất cánh".
+    // (biểu tượng, nhãn, tên-chế-độ) — mode rỗng nghĩa là "cất cánh".
     const std::vector<Action> actions = {
-        {"⬇", QStringLiteral("HẠ CÁNH"), QStringLiteral("LAND"), false},
-        {"↩", QStringLiteral("VỀ"), QStringLiteral("RTL"), false},
-        {"⏸", QStringLiteral("TẠM DỪNG"), QStringLiteral("LOITER"), false},
-        {"▶", QStringLiteral("CẤT CÁNH"), QString(), true},
+        {":/icons/land.png", QStringLiteral("HẠ CÁNH"), QStringLiteral("LAND"), false},
+        {":/icons/return.png", QStringLiteral("VỀ"), QStringLiteral("RTL"), false},
+        {":/icons/pause.png", QStringLiteral("TẠM DỪNG"), QStringLiteral("LOITER"), false},
+        {":/icons/takeoff.png", QStringLiteral("CẤT CÁNH"), QString(), true},
     };
 
     auto *col = new QVBoxLayout(this);
@@ -31,15 +32,15 @@ ModeRail::ModeRail(QWidget *parent) : QFrame(parent)
     col->setSpacing(8);
 
     for (const auto &a : actions) {
-        auto *btn = makeButton(QString::fromUtf8(a.glyph), a.label);
+        auto *btn = makeButton(theme::railIcon(QString::fromUtf8(a.icon)), QString(), a.label);
         if (a.isTakeoff) {
-            connect(btn, &QPushButton::clicked, this, &ModeRail::takeoffRequested);
+            connect(btn, &QToolButton::clicked, this, &ModeRail::takeoffRequested);
             btn->setToolTip(QStringLiteral("Cất cánh (arm + GUIDED, hỏi độ cao)"));
             m_actionBtn = btn;
         } else {
             btn->setCheckable(true);
             const QString mode = a.mode;
-            connect(btn, &QPushButton::clicked, this, [this, mode] { emit modeRequested(mode); });
+            connect(btn, &QToolButton::clicked, this, [this, mode] { emit modeRequested(mode); });
             btn->setToolTip(QStringLiteral("Chuyển sang %1").arg(mode));
             m_modeButtons.insert(mode, btn);
         }
@@ -49,10 +50,10 @@ ModeRail::ModeRail(QWidget *parent) : QFrame(parent)
     col->addSpacing(6);
 
     // bộ chọn đơn/đa phương tiện (chỉ để trang trí — bản này bay một phương tiện)
-    m_single = makeButton(QStringLiteral("◈"), QStringLiteral("ĐƠN"));
+    m_single = makeButton(QIcon(), QStringLiteral("◈"), QStringLiteral("ĐƠN"));
     m_single->setCheckable(true);
     m_single->setChecked(true);
-    m_multi = makeButton(QStringLiteral("⧉"), QStringLiteral("ĐA"));
+    m_multi = makeButton(QIcon(), QStringLiteral("⧉"), QStringLiteral("ĐA"));
     m_multi->setCheckable(true);
     m_multi->setEnabled(false);
     m_multi->setToolTip(QStringLiteral("Điều khiển đa phương tiện không có ở bản này"));
@@ -66,12 +67,21 @@ ModeRail::ModeRail(QWidget *parent) : QFrame(parent)
     setConnected(false);
 }
 
-QPushButton *ModeRail::makeButton(const QString &glyph, const QString &label)
+QToolButton *ModeRail::makeButton(const QIcon &icon, const QString &glyph, const QString &label)
 {
-    auto *btn = new QPushButton(glyph + QStringLiteral("\n") + label);
+    auto *btn = new QToolButton;
     btn->setObjectName("RailBtn");
+    btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
     btn->setCursor(Qt::PointingHandCursor);
     btn->setFixedSize(62, 56);
+    if (!icon.isNull()) {
+        btn->setIcon(icon);
+        btn->setIconSize(QSize(24, 24));
+        btn->setText(label);
+    } else {
+        // không có PNG: dùng glyph text trên nhãn
+        btn->setText(glyph + QStringLiteral("\n") + label);
+    }
     return btn;
 }
 

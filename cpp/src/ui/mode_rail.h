@@ -9,9 +9,10 @@
 #include "domain/telemetry.h"
 
 #include <QFrame>
+#include <QIcon>
 #include <QMap>
 
-class QPushButton;
+class QToolButton;
 
 namespace gcs::ui {
 
@@ -27,13 +28,14 @@ signals:
     void takeoffRequested();
 
 private:
-    QPushButton *makeButton(const QString &glyph, const QString &label);
+    // Nút biểu tượng-trên-nhãn. Truyền QIcon rỗng để chỉ hiện glyph text.
+    QToolButton *makeButton(const QIcon &icon, const QString &glyph, const QString &label);
 
     bool m_connected = false;
-    QMap<QString, QPushButton *> m_modeButtons;
-    QPushButton *m_actionBtn = nullptr;
-    QPushButton *m_single = nullptr;
-    QPushButton *m_multi = nullptr;
+    QMap<QString, QToolButton *> m_modeButtons;
+    QToolButton *m_actionBtn = nullptr;
+    QToolButton *m_single = nullptr;
+    QToolButton *m_multi = nullptr;
 };
 
 } // namespace gcs::ui

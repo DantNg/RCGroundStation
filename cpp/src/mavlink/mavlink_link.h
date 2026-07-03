@@ -59,10 +59,23 @@ public:
 private:
     enum class Kind { Serial, Udp, Tcp };
 
+    // Lệnh quan trọng (arm/mode/takeoff…) được gửi lại tới khi có COMMAND_ACK
+    // hoặc hết số lần thử — MAVLink không bảo đảm giao nên một gói COMMAND_LONG
+    // rơi mất sẽ khiến "arm xong không disarm". Chỉ theo dõi một lệnh mới nhất.
+    struct PendingCommand {
+        MavMessage msg;      // gói COMMAND_LONG đã đóng, sẵn sàng gửi lại
+        uint16_t command;    // để khớp với COMMAND_ACK trả về
+        int attemptsLeft;
+        int64_t nextSendMs;
+    };
+
     std::optional<MavMessage> parseFromBuffer();
     void learnTarget(const MavMessage &msg);
     void enqueue(const MavMessage &msg);
     void drainOutbox();
+    void trackCommand(const MavMessage &msg, uint16_t command);
+    void servicePending();          // luồng worker: gửi lại nếu quá hạn chưa ACK
+    void noteAck(const MavMessage &msg); // xóa pending khi ack khớp lệnh
     std::pair<int, int> requireTarget() const; // ném nếu chưa có mục tiêu
 
     QString m_connStr;
@@ -87,6 +100,9 @@ private:
 
     std::mutex m_outboxMutex;
     std::deque<QByteArray> m_outbox;
+
+    std::mutex m_pendingMutex;
+    std::optional<PendingCommand> m_pending;
 };
 
 } // namespace gcs::mavlink

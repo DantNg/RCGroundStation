@@ -1,0 +1,11 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+  <!-- Biểu tượng đường nét cho thanh hành động + chỉ báo tín hiệu. Nguồn: ../assets. -->
+  <qresource prefix="/icons">
+    <file alias="takeoff.png">../assets/takeoff.png</file>
+    <file alias="land.png">../assets/land.png</file>
+    <file alias="return.png">../assets/return.png</file>
+    <file alias="pause.png">../assets/pause.png</file>
+    <file alias="signal.png">../assets/signal.png</file>
+  </qresource>
+</RCC>

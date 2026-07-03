@@ -7,6 +7,8 @@
 #include "domain/telemetry.h"
 
 #include <QColor>
+#include <QIcon>
+#include <QPixmap>
 #include <QString>
 
 namespace gcs::theme {
@@ -39,6 +41,15 @@ inline QColor hudTextDim()       { return QColor("#9fb1bf"); }
 
 // Màu theo mức độ nghiêm trọng cho nhật ký tin nhắn.
 QString severityColor(domain::Severity sev);
+
+// ── biểu tượng đơn sắc ───────────────────────────────────────────────────────
+// Các PNG trong :/icons là đường nét đen trên nền trong suốt. Trên nền tối ta
+// nhuộm lại theo màu mong muốn (giữ nguyên kênh alpha).
+QPixmap tintedPixmap(const QString &resourcePath, const QColor &color);
+
+// QIcon đơn sắc cho nút thanh hành động: sáng khi thường, tối khi được chọn
+// (nền xanh), mờ khi vô hiệu — khớp với QSS của RailBtn.
+QIcon railIcon(const QString &resourcePath);
 
 // Toàn bộ QSS của ứng dụng.
 QString stylesheet();

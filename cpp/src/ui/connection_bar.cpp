@@ -24,6 +24,13 @@ QStringList listSerialPorts()
         out << p.portName();
     return out;
 }
+
+// Biểu tượng cột sóng nhuộm theo trạng thái, thu về cỡ chỉ báo.
+QPixmap signalDot(const QColor &color)
+{
+    return theme::tintedPixmap(QStringLiteral(":/icons/signal.png"), color)
+        .scaled(18, 18, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+}
 }
 
 ConnectionBar::ConnectionBar(const AppConfig &cfg, QWidget *parent)
@@ -34,8 +41,9 @@ ConnectionBar::ConnectionBar(const AppConfig &cfg, QWidget *parent)
     lay->setContentsMargins(14, 8, 14, 8);
     lay->setSpacing(8);
 
-    m_dot = new QLabel(QStringLiteral("●"));
-    m_dot->setStyleSheet(QStringLiteral("color: %1; font-size: 13px;").arg(theme::BAD));
+    m_dot = new QLabel;
+    m_dot->setPixmap(signalDot(QColor(theme::BAD)));
+    m_dot->setToolTip(QStringLiteral("Trạng thái tín hiệu liên kết"));
     m_status = new QLabel(QStringLiteral("Chưa kết nối"));
     m_status->setStyleSheet(QStringLiteral("font-weight: 600;"));
     auto *vsep = new QFrame;
@@ -131,8 +139,7 @@ void ConnectionBar::setConnected(bool connected)
     m_connectBtn->setText(connected ? QStringLiteral("Ngắt kết nối") : QStringLiteral("Kết nối"));
     m_type->setEnabled(!connected);
     m_stack->setEnabled(!connected);
-    const QString color = connected ? theme::GOOD : theme::BAD;
-    m_dot->setStyleSheet(QStringLiteral("color: %1; font-size: 13px;").arg(color));
+    m_dot->setPixmap(signalDot(QColor(connected ? theme::GOOD : theme::BAD)));
     m_status->setText(connected ? QStringLiteral("Đã kết nối") : QStringLiteral("Chưa kết nối"));
 }
 

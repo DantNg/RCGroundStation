@@ -1,5 +1,7 @@
 #include "mavlink/mavlink_link.h"
 
+#include "domain/telemetry.h"
+
 #include <QNetworkDatagram>
 #include <QSerialPort>
 #include <QTcpSocket>
@@ -9,9 +11,31 @@
 
 namespace gcs::mavlink {
 
+using domain::nowMs;
+
 namespace {
 // Mặt nạ type_mask: mọi bit bật trừ ba bit vị trí → "chỉ dùng vị trí".
 constexpr uint16_t kPosOnlyMask = 0b0000111111111000;
+
+// Gửi lại lệnh quan trọng cho tới khi có ACK. Khoảng chờ khớp với QGroundControl
+// (Vehicle::_commandTimeoutMilliseconds = 1000 ms): autopilot cần thời gian chạy
+// kiểm tra tiền-arm rồi mới trả COMMAND_ACK, nếu gửi lại quá sớm (vd 300 ms) thì
+// lệnh trùng sẽ bị "TẠM THỜI TỪ CHỐI" và arm không ăn.
+constexpr int kCmdMaxAttempts = 3;
+constexpr int64_t kCmdRetryIntervalMs = 1000;
+
+bool isCriticalCommand(int command)
+{
+    switch (command) {
+    case MAV_CMD_COMPONENT_ARM_DISARM:
+    case MAV_CMD_NAV_TAKEOFF:
+    case MAV_CMD_MISSION_START:
+    case MAV_CMD_DO_SET_MODE:
+        return true;
+    default:
+        return false;
+    }
+}
 
 QByteArray toBytes(const MavMessage &msg)
 {
@@ -87,6 +111,10 @@ void MavlinkLink::close()
     if (m_udp)    { m_udp->close(); m_udp.reset(); }
     m_rxBuf.clear();
     m_rxPos = 0;
+    {
+        std::lock_guard<std::mutex> lock(m_pendingMutex);
+        m_pending.reset();
+    }
 }
 
 std::optional<MavMessage> MavlinkLink::parseFromBuffer()
@@ -100,6 +128,7 @@ std::optional<MavMessage> MavlinkLink::parseFromBuffer()
             m_rxBuf.remove(0, m_rxPos);
             m_rxPos = 0;
             learnTarget(msg);
+            noteAck(msg);
             return msg;
         }
     }
@@ -110,7 +139,9 @@ std::optional<MavMessage> MavlinkLink::parseFromBuffer()
 
 std::optional<MavMessage> MavlinkLink::recv(double timeoutS)
 {
-    // Mọi lệnh gửi đã xếp hàng được đẩy đi tại đây, trên luồng worker.
+    // Gửi lại lệnh quan trọng chưa được ACK, rồi đẩy mọi lệnh đã xếp hàng đi —
+    // tất cả trên luồng worker.
+    servicePending();
     drainOutbox();
 
     if (auto m = parseFromBuffer())
@@ -143,18 +174,59 @@ std::optional<MavMessage> MavlinkLink::recv(double timeoutS)
 
 void MavlinkLink::learnTarget(const MavMessage &msg)
 {
-    // Học danh tính phương tiện từ heartbeat đầu tiên nó gửi. Bỏ qua heartbeat
-    // của chính ta và của các thành phần GCS khác.
+    // Khóa vào đúng thành phần bộ điều khiển bay (giống _defaultComponentId của
+    // QGroundControl). Một phương tiện phát heartbeat từ nhiều thành phần —
+    // gimbal, camera, máy tính đồng hành, radio — nhưng chỉ bộ điều khiển bay
+    // thật mới đặt autopilot ≠ INVALID. Nếu học nhầm compid của gimbal thì lệnh
+    // ARM gửi tới đó sẽ bị từ chối và không bao giờ arm được.
     if (msg.msgid != MAVLINK_MSG_ID_HEARTBEAT)
         return;
     if (msg.sysid == kGcsSystem)
         return;
     mavlink_heartbeat_t hb;
     mavlink_msg_heartbeat_decode(&msg, &hb);
-    if (hb.type == MAV_TYPE_GCS)
+    if (hb.autopilot == MAV_AUTOPILOT_INVALID || hb.type == MAV_TYPE_GCS)
         return;
     m_targetSystem.store(msg.sysid);
     m_targetComponent.store(msg.compid);
+}
+
+// ── gửi lại lệnh quan trọng cho tới khi có ACK ──────────────────────────────
+void MavlinkLink::trackCommand(const MavMessage &msg, uint16_t command)
+{
+    std::lock_guard<std::mutex> lock(m_pendingMutex);
+    m_pending = PendingCommand{msg, command, kCmdMaxAttempts,
+                               nowMs() + kCmdRetryIntervalMs};
+}
+
+void MavlinkLink::servicePending()
+{
+    std::optional<MavMessage> resend;
+    {
+        std::lock_guard<std::mutex> lock(m_pendingMutex);
+        if (m_pending && nowMs() >= m_pending->nextSendMs) {
+            if (m_pending->attemptsLeft <= 0) {
+                m_pending.reset(); // hết lượt thử — buông
+            } else {
+                --m_pending->attemptsLeft;
+                m_pending->nextSendMs = nowMs() + kCmdRetryIntervalMs;
+                resend = m_pending->msg;
+            }
+        }
+    }
+    if (resend)
+        enqueue(*resend); // drainOutbox() ngay sau đó sẽ đẩy đi
+}
+
+void MavlinkLink::noteAck(const MavMessage &msg)
+{
+    if (msg.msgid != MAVLINK_MSG_ID_COMMAND_ACK)
+        return;
+    mavlink_command_ack_t ack;
+    mavlink_msg_command_ack_decode(&msg, &ack);
+    std::lock_guard<std::mutex> lock(m_pendingMutex);
+    if (m_pending && m_pending->command == ack.command)
+        m_pending.reset(); // phương tiện đã nhận — thôi gửi lại
 }
 
 // ── xếp hàng gửi ────────────────────────────────────────────────────────────
@@ -203,6 +275,8 @@ void MavlinkLink::commandLong(int command, float p1, float p2, float p3, float p
         sys, comp, static_cast<uint16_t>(command),
         static_cast<uint8_t>(confirmation), p1, p2, p3, p4, p5, p6, p7);
     enqueue(msg);
+    if (isCriticalCommand(command))
+        trackCommand(msg, static_cast<uint16_t>(command));
 }
 
 void MavlinkLink::setMode(int baseMode, int customMode)
