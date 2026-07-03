@@ -1,7 +1,7 @@
 // Thanh hành động/chế độ bay bên trái — dải nút dọc trên fly-view.
 //
 // Phản chiếu bố cục kiểu trạm mặt đất NASA: một chồng nút to (icon+nhãn) dọc mép
-// trái cho các hành động thường dùng khi bay (HẠ CÁNH, VỀ, TẠM DỪNG) cộng nút
+// trái cho các hành động thường dùng khi bay (HẠ CÁNH, VỀ, DỪNG) cộng nút
 // HÀNH ĐỘNG (cất cánh), rồi bộ chọn ĐƠN/ĐA ở dưới. Các nút chế độ ánh xạ tới chế
 // độ bay ArduCopter và sáng lên khi chế độ đó hoạt động (đọc từ HEARTBEAT).
 #pragma once

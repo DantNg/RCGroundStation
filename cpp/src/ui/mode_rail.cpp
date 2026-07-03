@@ -23,7 +23,7 @@ ModeRail::ModeRail(QWidget *parent) : QFrame(parent)
     const std::vector<Action> actions = {
         {":/icons/land.png", QStringLiteral("HẠ CÁNH"), QStringLiteral("LAND"), false},
         {":/icons/return.png", QStringLiteral("VỀ"), QStringLiteral("RTL"), false},
-        {":/icons/pause.png", QStringLiteral("TẠM DỪNG"), QStringLiteral("LOITER"), false},
+        {":/icons/pause.png", QStringLiteral("DỪNG"), QStringLiteral("LOITER"), false},
         {":/icons/takeoff.png", QStringLiteral("CẤT CÁNH"), QString(), true},
     };
 
