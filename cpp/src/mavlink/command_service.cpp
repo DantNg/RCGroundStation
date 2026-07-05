@@ -3,6 +3,8 @@
 #include "domain/flight_modes.h"
 #include "mavlink/mav_message.h"
 
+#include <QTimer>
+
 namespace gcs::mavlink {
 
 using domain::Severity;
@@ -13,6 +15,12 @@ namespace fm = domain::flight_modes;
 namespace {
 constexpr int kCustomModeEnabled = 1; // MAV_MODE_FLAG_CUSTOM_MODE_ENABLED
 constexpr float kArmMagicForce = 21196.0f; // param2 buộc (dis)arm bỏ qua kiểm tra
+// Chờ phương tiện vào GUIDED trước khi cất cánh. Nếu gửi TAKEOFF ngay sau lệnh
+// đổi chế độ (trong cùng chu kỳ xả outbox), autopilot nhận TAKEOFF trước khi kịp
+// vào GUIDED và xác nhận vị trí → trả về "Need position estimate". Mission Planner
+// không dính lỗi này vì có độ trễ thao tác tay giữa đổi mode và takeoff.
+constexpr int kGuidedPollMs = 250;       // nhịp kiểm tra heartbeat báo GUIDED
+constexpr int64_t kGuidedWaitMs = 3000;  // tối đa chờ vào GUIDED rồi bỏ cuộc
 }
 
 CommandService::CommandService(LinkProvider link, StateProvider state, NoticeSink notify)
@@ -56,7 +64,51 @@ void CommandService::takeoff(double altitudeM)
         error(QStringLiteral("Từ chối cất cánh: phương tiện chưa ARM — hãy arm trước"));
         return;
     }
+    const auto s = m_state();
+    const QString current = fm::modeName(s.mode.autopilot, s.mode.customMode);
+    if (current == QLatin1String("GUIDED")) {
+        sendTakeoff(altitudeM); // đã ở GUIDED → cất cánh ngay
+        return;
+    }
+    // Chưa ở GUIDED: chuyển chế độ rồi CHỜ heartbeat xác nhận mới gửi TAKEOFF,
+    // tránh lỗi "Need position estimate" do lệnh tới trước khi vào GUIDED.
     ensureGuided(sink);
+    info(QStringLiteral("Chờ vào GUIDED trước khi cất cánh…"));
+    waitForGuidedThenTakeoff(altitudeM, nowMs() + kGuidedWaitMs);
+}
+
+void CommandService::waitForGuidedThenTakeoff(double altitudeM, int64_t deadlineMs)
+{
+    QTimer::singleShot(kGuidedPollMs, [this, altitudeM, deadlineMs] {
+        if (!m_link()) {
+            error(QStringLiteral("Mất kết nối — hủy cất cánh"));
+            return;
+        }
+        const auto s = m_state();
+        if (!s.mode.armed) {
+            error(QStringLiteral("Phương tiện đã disarm — hủy cất cánh"));
+            return;
+        }
+        const QString current = fm::modeName(s.mode.autopilot, s.mode.customMode);
+        if (current == QLatin1String("GUIDED")) {
+            sendTakeoff(altitudeM);
+            return;
+        }
+        if (nowMs() >= deadlineMs) {
+            error(QStringLiteral("Không vào được GUIDED sau %1 s — hủy cất cánh. "
+                                 "Kiểm tra GPS/EKF (Need position estimate).")
+                      .arg(kGuidedWaitMs / 1000.0, 0, 'f', 0));
+            return;
+        }
+        waitForGuidedThenTakeoff(altitudeM, deadlineMs); // thử lại
+    });
+}
+
+void CommandService::sendTakeoff(double altitudeM)
+{
+    auto *sink = requireLink();
+    if (!sink)
+        return;
     try {
         sink->commandLong(MAV_CMD_NAV_TAKEOFF, 0, 0, 0, 0, 0, 0,
                           static_cast<float>(altitudeM));

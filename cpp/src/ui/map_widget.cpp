@@ -13,12 +13,14 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QMenu>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QPainter>
 #include <QPolygonF>
+#include <QProgressDialog>
 #include <QPushButton>
 #include <QStackedWidget>
 #include <QTimer>
@@ -37,6 +39,7 @@ namespace gcs::ui {
 namespace {
 constexpr int TILE = 256;
 constexpr int kSimHz = 30;
+constexpr int kPrefetchConcurrency = 6; // số tile tải song song khi seed offline
 const char *kUserAgent = "LiteGCS-Desktop/1.0 (+https://github.com/)";
 
 QString cacheDir()
@@ -73,6 +76,27 @@ std::pair<double, double> worldPxToLonlat(double px, double py, int z)
     const double ty = py / TILE / n;
     const double lat = std::atan(std::sinh(M_PI * (1 - 2 * ty))) * 180.0 / M_PI;
     return {lat, lon};
+}
+
+// Đếm số tile phủ khung bao [w,s,e,n] qua các mức zoom (để ước tính trước khi tải).
+long long countTilesForBbox(double w, double s, double e, double n, int zmin, int zmax)
+{
+    long long total = 0;
+    for (int z = zmin; z <= zmax; ++z) {
+        const int nTiles = int(std::pow(2.0, z));
+        auto tileX = [&](double lon) {
+            return int(std::floor(lonlatToWorldPx(0.0, lon, z).first / TILE));
+        };
+        auto tileY = [&](double lat) {
+            return int(std::floor(lonlatToWorldPx(lat, 0.0, z).second / TILE));
+        };
+        const int xlo = std::max(0, std::min(tileX(w), tileX(e)));
+        const int xhi = std::min(nTiles - 1, std::max(tileX(w), tileX(e)));
+        const int ylo = std::max(0, std::min(tileY(n), tileY(s)));
+        const int yhi = std::min(nTiles - 1, std::max(tileY(n), tileY(s)));
+        total += static_cast<long long>(xhi - xlo + 1) * (yhi - ylo + 1);
+    }
+    return total;
 }
 }
 
@@ -117,6 +141,30 @@ QImage TileLoader::get(const TileProvider &provider, int z, int x, int y)
             return img;
         }
     }
+    requestTile(provider, z, x, y);
+    return QImage();
+}
+
+QImage TileLoader::cached(const TileProvider &provider, int z, int x, int y)
+{
+    const QString key = keyOf(provider.name, z, x, y);
+    auto it = m_mem.find(key);
+    if (it != m_mem.end())
+        return it.value();
+    const QString disk = diskPath(provider.name, z, x, y);
+    if (QFileInfo::exists(disk)) {
+        QImage img(disk);
+        if (!img.isNull()) {
+            m_mem.insert(key, img);
+            return img;
+        }
+    }
+    return QImage();
+}
+
+void TileLoader::requestTile(const TileProvider &provider, int z, int x, int y)
+{
+    const QString key = keyOf(provider.name, z, x, y);
     if (!m_pending.contains(key)) {
         m_pending.insert(key);
         QNetworkRequest req{QUrl(provider.url(z, x, y))};
@@ -145,7 +193,116 @@ QImage TileLoader::get(const TileProvider &provider, int z, int x, int y)
             emit ready();
         });
     }
-    return QImage();
+}
+
+// ── Prefetch offline ────────────────────────────────────────────────────────
+void TileLoader::startPrefetch(const TileProvider &provider, double w, double s,
+                               double e, double n, int zmin, int zmax)
+{
+    if (m_pfActive)
+        return;
+    m_pfProvider = provider;
+    m_pfJobs.clear();
+    m_pfNext = 0;
+    m_pfInflight = 0;
+    m_pfOk = 0;
+    m_pfSkip = 0;
+    m_pfFail = 0;
+    m_pfLastError.clear();
+    for (int z = zmin; z <= zmax; ++z) {
+        const int nTiles = int(std::pow(2.0, z));
+        auto tileAt = [&](double lat, double lon) {
+            const auto [px, py] = lonlatToWorldPx(lat, lon, z);
+            return std::pair<int, int>{int(std::floor(px / TILE)), int(std::floor(py / TILE))};
+        };
+        auto [x0, yN] = tileAt(n, w); // bắc-tây: lat lớn → y nhỏ
+        auto [x1, yS] = tileAt(s, e); // nam-đông
+        const int xlo = std::max(0, std::min(x0, x1));
+        const int xhi = std::min(nTiles - 1, std::max(x0, x1));
+        const int ylo = std::max(0, std::min(yN, yS));
+        const int yhi = std::min(nTiles - 1, std::max(yN, yS));
+        for (int x = xlo; x <= xhi; ++x)
+            for (int y = ylo; y <= yhi; ++y)
+                m_pfJobs.push_back({z, x, y});
+    }
+    m_pfActive = true;
+    emit prefetchProgress(0, int(m_pfJobs.size()));
+    pumpPrefetch();
+}
+
+void TileLoader::cancelPrefetch()
+{
+    if (!m_pfActive)
+        return;
+    m_pfActive = false;
+    m_pfJobs.clear();
+    m_pfNext = 0;
+    // Các reply đang bay sẽ tự kết thúc; lambda thấy !m_pfActive nên bỏ qua.
+    emit prefetchDone(m_pfOk, m_pfSkip, m_pfFail, /*canceled=*/true);
+}
+
+void TileLoader::pumpPrefetch()
+{
+    if (!m_pfActive)
+        return;
+    const int total = int(m_pfJobs.size());
+    auto done = [this] { return m_pfOk + m_pfSkip + m_pfFail; };
+    while (m_pfInflight < kPrefetchConcurrency && m_pfNext < m_pfJobs.size()) {
+        const PrefetchJob job = m_pfJobs[m_pfNext++];
+        const QString disk = diskPath(m_pfProvider.name, job.z, job.x, job.y);
+        if (QFileInfo::exists(disk)) {
+            ++m_pfSkip;
+            if (done() % 50 == 0 || m_pfNext >= m_pfJobs.size())
+                emit prefetchProgress(done(), total);
+            continue;
+        }
+        ++m_pfInflight;
+        QNetworkRequest req{QUrl(m_pfProvider.url(job.z, job.x, job.y))};
+        req.setHeader(QNetworkRequest::UserAgentHeader, QString::fromLatin1(kUserAgent));
+        QNetworkReply *reply = m_net->get(req);
+        const QString name = m_pfProvider.name;
+        connect(reply, &QNetworkReply::finished, this, [this, reply, name, job, total] {
+            reply->deleteLater();
+            --m_pfInflight;
+            if (m_pfActive) {
+                bool saved = false;
+                if (reply->error() == QNetworkReply::NoError) {
+                    const QByteArray data = reply->readAll();
+                    QImage img;
+                    if (img.loadFromData(data)) {
+                        const QString path = diskPath(name, job.z, job.x, job.y);
+                        QDir().mkpath(QFileInfo(path).absolutePath());
+                        QFile f(path);
+                        if (f.open(QIODevice::WriteOnly)
+                            && f.write(data) == data.size()) {
+                            f.close();
+                            m_mem.insert(keyOf(name, job.z, job.x, job.y), img);
+                            saved = true;
+                        }
+                    }
+                }
+                if (saved) {
+                    ++m_pfOk;
+                } else {
+                    ++m_pfFail;
+                    if (m_pfLastError.isEmpty()
+                        && reply->error() != QNetworkReply::NoError)
+                        m_pfLastError = reply->errorString();
+                }
+                emit prefetchProgress(m_pfOk + m_pfSkip + m_pfFail, total);
+                pumpPrefetch();
+            }
+            if (m_pfActive && m_pfInflight == 0 && m_pfNext >= m_pfJobs.size()) {
+                m_pfActive = false;
+                emit prefetchDone(m_pfOk, m_pfSkip, m_pfFail, /*canceled=*/false);
+            }
+        });
+    }
+    // Trường hợp toàn tile đã có sẵn (chỉ toàn skip, không có reply nào).
+    if (m_pfActive && m_pfInflight == 0 && m_pfNext >= m_pfJobs.size()) {
+        m_pfActive = false;
+        emit prefetchDone(m_pfOk, m_pfSkip, m_pfFail, /*canceled=*/false);
+    }
 }
 
 // ── MapCanvas ────────────────────────────────────────────────────────────────
@@ -173,6 +330,11 @@ private:
     void drawMarker(QPainter &p, double ox, double oy, int z);
     void drawSim(QPainter &p, double ox, double oy, int z);
     void drawHudText(QPainter &p);
+    // Khi thiếu tile ở zoom hiện tại, vẽ phần tương ứng của tile tổ tiên (zoom
+    // thấp hơn) đã cache, phóng to lên — nhờ vậy pan sang vùng chưa tải vẫn thấy
+    // bản đồ mờ thay vì ô trống. Trả về true nếu đã vẽ được.
+    bool drawOverzoom(QPainter &p, MapWidget *o, double sx, double sy,
+                      int z, int x, int y);
     std::pair<double, double> screenToLonlat(const QPointF &pos);
     std::optional<int> wpAt(const QPointF &pos);
 
@@ -208,7 +370,7 @@ void MapCanvas::paintEvent(QPaintEvent *)
             const QImage img = o->m_loader->get(o->m_provider, z, wx, ty);
             if (!img.isNull()) {
                 p.drawImage(QPointF(sx, sy), img);
-            } else {
+            } else if (!drawOverzoom(p, o, sx, sy, z, wx, ty)) {
                 p.fillRect(int(sx), int(sy), TILE, TILE, QColor("#1b2230"));
                 p.setPen(QPen(QColor("#222b3a")));
                 p.drawRect(int(sx), int(sy), TILE, TILE);
@@ -222,6 +384,27 @@ void MapCanvas::paintEvent(QPaintEvent *)
     drawMarker(p, originX, originY, z);
     drawSim(p, originX, originY, z);
     drawHudText(p);
+}
+
+bool MapCanvas::drawOverzoom(QPainter &p, MapWidget *o, double sx, double sy,
+                             int z, int x, int y)
+{
+    // Đi ngược lên tối đa 6 mức zoom tìm tile tổ tiên đã có trong cache.
+    for (int dz = 1; dz <= 6 && z - dz >= 0; ++dz) {
+        const int pz = z - dz;
+        const int px = x >> dz;
+        const int py = y >> dz;
+        const QImage anc = o->m_loader->cached(o->m_provider, pz, px, py);
+        if (anc.isNull())
+            continue;
+        const int span = 1 << dz;                 // số ô con mỗi cạnh
+        const double srcSize = double(anc.width()) / span;
+        const QRectF src((x - (px << dz)) * srcSize, (y - (py << dz)) * srcSize,
+                         srcSize, srcSize);
+        p.drawImage(QRectF(sx, sy, TILE, TILE), anc, src);
+        return true;
+    }
+    return false;
 }
 
 void MapCanvas::drawTrail(QPainter &p, double ox, double oy, int z)
@@ -489,6 +672,8 @@ MapWidget::MapWidget(QWidget *parent) : QWidget(parent)
 
     m_loader = new TileLoader(this);
     connect(m_loader, &TileLoader::ready, this, [this] { m_canvas->update(); });
+    connect(m_loader, &TileLoader::prefetchProgress, this, &MapWidget::onPrefetchProgress);
+    connect(m_loader, &TileLoader::prefetchDone, this, &MapWidget::onPrefetchDone);
 
     auto *outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
@@ -541,6 +726,19 @@ QWidget *MapWidget::buildControls()
 
     QAction *clearAction = planMenu->addAction(QStringLiteral("🗑  Xoá nhiệm vụ"));
     connect(clearAction, &QAction::triggered, this, &MapWidget::clearMission);
+
+    planMenu->addSeparator();
+    QAction *viewAction = planMenu->addAction(
+        QStringLiteral("⬇  Tải khu vực đang xem (offline)"));
+    viewAction->setToolTip(QStringLiteral("Tải tile vùng đang hiển thị ở lớp hiện tại, "
+        "zoom hiện tại + 4 mức — nhẹ, nhanh, đúng nơi bay. Chạy lúc có internet"));
+    connect(viewAction, &QAction::triggered, this, &MapWidget::downloadCurrentView);
+
+    QAction *offlineAction = planMenu->addAction(
+        QStringLiteral("⬇  Tải bản đồ VN (offline)"));
+    offlineAction->setToolTip(QStringLiteral("Tải trước tile toàn Việt Nam vào cache "
+        "để dùng khi không có mạng — hãy chạy lúc đang có internet"));
+    connect(offlineAction, &QAction::triggered, this, &MapWidget::downloadVietnam);
 
     planMenu->addSeparator();
 
@@ -842,6 +1040,133 @@ void MapWidget::clearTarget()
 {
     m_target.reset();
     m_canvas->update();
+}
+
+void MapWidget::downloadVietnam()
+{
+    if (m_loader->prefetching()) {
+        QMessageBox::information(this, QStringLiteral("Đang tải"),
+            QStringLiteral("Đang tải bản đồ — đợi hoặc bấm Huỷ trong hộp tiến trình."));
+        return;
+    }
+    // BBox Việt Nam (đất liền): west, south, east, north.
+    const double w = 102.0, s = 8.0, e = 110.0, n = 23.6;
+    const int zmin = 5, zmax = std::min(m_provider.maxZoom, 12);
+    const long long count = countTilesForBbox(w, s, e, n, zmin, zmax);
+    QMessageBox box(this);
+    box.setIcon(QMessageBox::Question);
+    box.setWindowTitle(QStringLiteral("Tải bản đồ Việt Nam (offline)"));
+    box.setText(QStringLiteral("Tải trước tile '%1' cho toàn Việt Nam (zoom %2–%3) vào cache.")
+                    .arg(m_provider.name).arg(zmin).arg(zmax));
+    box.setInformativeText(QStringLiteral(
+        "Khoảng ~%1 tile (~%2 MB), có thể mất khá lâu tuỳ mạng.\n"
+        "CẦN internet lúc này. Tile đã có sẽ được bỏ qua.\n\n"
+        "Zoom chi tiết chỉ tới %3 — muốn rõ hơn quanh nơi bay, dùng "
+        "\"Tải khu vực đang xem\" tại đó.").arg(count).arg(count * 20 / 1024).arg(zmax));
+    box.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+    box.setDefaultButton(QMessageBox::No);
+    if (box.exec() != QMessageBox::Yes)
+        return;
+    startOfflineDownload(w, s, e, n, zmin, zmax, QStringLiteral("bản đồ Việt Nam"));
+}
+
+void MapWidget::downloadCurrentView()
+{
+    if (m_loader->prefetching()) {
+        QMessageBox::information(this, QStringLiteral("Đang tải"),
+            QStringLiteral("Đang tải bản đồ — đợi hoặc bấm Huỷ trong hộp tiến trình."));
+        return;
+    }
+    // Khung bao đang hiển thị = 4 góc màn hình canvas quy về lon/lat.
+    const int w = m_canvas->width(), h = m_canvas->height();
+    const int z = m_zoom;
+    const auto [cxPx, cyPx] = lonlatToWorldPx(m_centerLat, m_centerLon, z);
+    const auto tl = worldPxToLonlat(cxPx - w / 2.0, cyPx - h / 2.0, z); // (lat, lon)
+    const auto br = worldPxToLonlat(cxPx + w / 2.0, cyPx + h / 2.0, z);
+    const double north = tl.first, west = tl.second;
+    const double south = br.first, east = br.second;
+    const int zmin = z;
+    const int zmax = std::min(m_provider.maxZoom, z + 4);
+    const long long count = countTilesForBbox(west, south, east, north, zmin, zmax);
+    QMessageBox box(this);
+    box.setIcon(QMessageBox::Question);
+    box.setWindowTitle(QStringLiteral("Tải khu vực đang xem (offline)"));
+    box.setText(QStringLiteral("Tải tile '%1' cho vùng đang hiển thị (zoom %2–%3).")
+                    .arg(m_provider.name).arg(zmin).arg(zmax));
+    box.setInformativeText(QStringLiteral(
+        "Khoảng ~%1 tile (~%2 MB). CẦN internet lúc này. Tile đã có sẽ bỏ qua.\n\n"
+        "Mẹo: căn giữa bản đồ vào nơi sẽ bay rồi tải, sẽ có ảnh nét để dùng offline.")
+        .arg(count).arg(std::max<long long>(1, count * 20 / 1024)));
+    box.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+    box.setDefaultButton(QMessageBox::Yes);
+    if (box.exec() != QMessageBox::Yes)
+        return;
+    startOfflineDownload(west, south, east, north, zmin, zmax,
+                         QStringLiteral("khu vực đang xem"));
+}
+
+void MapWidget::startOfflineDownload(double w, double s, double e, double n,
+                                     int zmin, int zmax, const QString &what)
+{
+    delete m_offlineProgress; // dọn hộp cũ nếu còn
+    m_offlineProgress = new QProgressDialog(
+        QStringLiteral("Đang tải %1…").arg(what), QStringLiteral("Huỷ"), 0, 0, this);
+    m_offlineProgress->setWindowTitle(QStringLiteral("Tải bản đồ offline"));
+    m_offlineProgress->setWindowModality(Qt::NonModal);
+    m_offlineProgress->setMinimumDuration(0);
+    m_offlineProgress->setAutoClose(false);
+    m_offlineProgress->setAutoReset(false);
+    connect(m_offlineProgress, &QProgressDialog::canceled, this,
+            [this] { m_loader->cancelPrefetch(); });
+    m_offlineProgress->show();
+    m_loader->startPrefetch(m_provider, w, s, e, n, zmin, zmax);
+}
+
+void MapWidget::onPrefetchProgress(int done, int total)
+{
+    if (!m_offlineProgress)
+        return;
+    if (m_offlineProgress->maximum() != total)
+        m_offlineProgress->setMaximum(total);
+    m_offlineProgress->setValue(done);
+    m_offlineProgress->setLabelText(
+        QStringLiteral("Đang tải bản đồ Việt Nam…\n%1 / %2 tile").arg(done).arg(total));
+}
+
+void MapWidget::onPrefetchDone(int saved, int skipped, int failed, bool canceled)
+{
+    if (m_offlineProgress) {
+        m_offlineProgress->close();
+        m_offlineProgress->deleteLater();
+        m_offlineProgress = nullptr;
+    }
+    m_canvas->update();
+
+    const QString stat = QStringLiteral("Tải mới %1 · đã có %2 · lỗi %3 tile.")
+                             .arg(saved).arg(skipped).arg(failed);
+    // Lỗi nhiều mà không tải được gì ⇒ gần như chắc do mất internet lúc tải.
+    if (!canceled && saved == 0 && failed > 0) {
+        QString reason = m_loader->lastPrefetchError();
+        QMessageBox::warning(this, QStringLiteral("Tải bản đồ offline — thất bại"),
+            QStringLiteral("KHÔNG tải/lưu được tile nào (lỗi %1).\n\n"
+                "Lý do mạng: %2\n\n"
+                "Nếu máy có internet mà vẫn lỗi, thường là do TLS/HTTPS. "
+                "Bản mới đã chuyển sang Schannel — hãy chạy đúng bản LiteGCS.exe vừa build.\n\n%3")
+                .arg(failed)
+                .arg(reason.isEmpty() ? QStringLiteral("(không rõ)") : reason)
+                .arg(stat));
+        return;
+    }
+    if (canceled) {
+        QMessageBox::information(this, QStringLiteral("Đã huỷ tải"),
+            QStringLiteral("Đã dừng. Phần đã lưu vẫn dùng được offline.\n%1").arg(stat));
+        return;
+    }
+    QString msg = QStringLiteral("Xong! %1\nBản đồ vùng này giờ dùng được khi không có mạng.")
+                      .arg(stat);
+    if (failed > 0)
+        msg += QStringLiteral("\n\nMột số tile lỗi (mạng chập chờn?) — chạy lại để tải nốt.");
+    QMessageBox::information(this, QStringLiteral("Tải bản đồ offline"), msg);
 }
 
 } // namespace gcs::ui

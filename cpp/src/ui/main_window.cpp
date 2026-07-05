@@ -49,6 +49,11 @@ MainWindow::MainWindow(app::GcsController *controller, AppConfig config)
     m_connBar = new ConnectionBar(m_config);
     connect(m_connBar, &ConnectionBar::connectRequested, this, &MainWindow::onConnect);
     connect(m_connBar, &ConnectionBar::disconnectRequested, this, &MainWindow::onDisconnect);
+    connect(m_connBar, &ConnectionBar::quitRequested, this, [this] {
+        if (confirm(QStringLiteral("Thoát ứng dụng?"),
+                    QStringLiteral("Đóng Trạm Điều Khiển Mặt Đất. Kết nối hiện tại (nếu có) sẽ được ngắt.")))
+            close();
+    });
 
     m_map = new MapWidget;
     m_camera = new CameraView;

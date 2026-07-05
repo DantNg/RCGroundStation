@@ -27,6 +27,7 @@ public:
 signals:
     void connectRequested(const AppConfig &cfg);
     void disconnectRequested();
+    void quitRequested();
 
 private:
     QWidget *buildSerial();

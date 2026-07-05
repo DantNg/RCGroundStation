@@ -9,6 +9,7 @@
 #include "ui/main_window.h"
 
 #include <QApplication>
+#include <QSslSocket>
 
 #include <cstdlib>
 
@@ -32,6 +33,16 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("Trạm Điều Khiển Mặt Đất"));
     app.setApplicationDisplayName(QStringLiteral("Trạm Điều Khiển Mặt Đất — Desktop"));
+
+    // TLS cho tải tile bản đồ (https). Trên Windows, Qt mặc định dùng OpenSSL,
+    // nhưng bản dựng MinGW này KHÔNG kèm OpenSSL 3 → mọi request https thất bại và
+    // bản đồ không tải được tile mới. Chuyển sang Schannel (TLS sẵn có của Windows,
+    // không cần DLL ngoài). Phải đặt trước request mạng đầu tiên. Trên Linux không
+    // có backend này nên bỏ qua an toàn.
+    if (QSslSocket::availableBackends().contains(QStringLiteral("schannel"))
+        && QSslSocket::activeBackend() != QStringLiteral("schannel")) {
+        QSslSocket::setActiveBackend(QStringLiteral("schannel"));
+    }
 
     gcs::AppConfig config = gcs::AppConfig::load();
     gcs::app::GcsController controller(gcs::domain::roleFromString(config.role));

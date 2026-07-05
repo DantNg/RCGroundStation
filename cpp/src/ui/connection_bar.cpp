@@ -76,6 +76,13 @@ ConnectionBar::ConnectionBar(const AppConfig &cfg, QWidget *parent)
     });
     lay->addWidget(m_connectBtn);
 
+    auto *quitBtn = new QPushButton(QStringLiteral("✕ Thoát"));
+    quitBtn->setObjectName("QuitApp");
+    quitBtn->setToolTip(QStringLiteral("Đóng ứng dụng"));
+    quitBtn->setCursor(Qt::PointingHandCursor);
+    connect(quitBtn, &QPushButton::clicked, this, &ConnectionBar::quitRequested);
+    lay->addWidget(quitBtn);
+
     applyConfig(cfg);
 }
 

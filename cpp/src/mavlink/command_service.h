@@ -10,6 +10,7 @@
 #include "domain/telemetry.h"
 #include "interfaces/ports.h"
 
+#include <cstdint>
 #include <functional>
 
 namespace gcs::mavlink {
@@ -33,6 +34,10 @@ private:
     void sendArm(bool arm, bool force);
     void ensureGuided(interfaces::ICommandSink *sink);
     void switchMode(interfaces::ICommandSink *sink, const QString &modeName, bool announce);
+    // Gửi lệnh NAV_TAKEOFF thô (giả định đã ở GUIDED và đã ARM).
+    void sendTakeoff(double altitudeM);
+    // Chờ heartbeat xác nhận đã vào GUIDED rồi mới cất cánh (poll tới deadline).
+    void waitForGuidedThenTakeoff(double altitudeM, int64_t deadlineMs);
     interfaces::ICommandSink *requireLink();
     void info(const QString &text);
     void error(const QString &text);

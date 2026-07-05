@@ -18,10 +18,12 @@
 #include <QWidget>
 
 #include <optional>
+#include <vector>
 
 class QComboBox;
 class QLabel;
 class QNetworkAccessManager;
+class QProgressDialog;
 class QPushButton;
 class QStackedWidget;
 class QTimer;
@@ -46,18 +48,46 @@ public:
     explicit TileLoader(QObject *parent = nullptr);
     // Trả về ảnh nếu có sẵn (bộ nhớ/đĩa), ngược lại kích hoạt tải và trả null.
     QImage get(const TileProvider &provider, int z, int x, int y);
+    // Chỉ tra bộ nhớ/đĩa, KHÔNG gọi mạng — dùng cho fallback overzoom.
+    QImage cached(const TileProvider &provider, int z, int x, int y);
+
+    // Tải trước mọi tile trong khung bao [w,s,e,n] các mức zoom [zmin,zmax] vào
+    // cache đĩa (dùng để seed bản đồ offline). Bất đồng bộ, giới hạn số yêu cầu
+    // đồng thời; phát prefetchProgress/prefetchDone. Gọi khi CÓ internet.
+    void startPrefetch(const TileProvider &provider, double w, double s,
+                       double e, double n, int zmin, int zmax);
+    void cancelPrefetch();
+    bool prefetching() const { return m_pfActive; }
+    // Lý do lỗi mạng đầu tiên gặp trong lần prefetch gần nhất (để chẩn đoán).
+    QString lastPrefetchError() const { return m_pfLastError; }
 
 signals:
     void ready();
+    void prefetchProgress(int done, int total);
+    void prefetchDone(int saved, int skipped, int failed, bool canceled);
 
 private:
     static QString keyOf(const QString &name, int z, int x, int y);
     static QString diskPath(const QString &name, int z, int x, int y);
+    void requestTile(const TileProvider &provider, int z, int x, int y);
+    void pumpPrefetch();
 
     QHash<QString, QImage> m_mem;
     QSet<QString> m_pending;
     QSet<QString> m_failed;
     QNetworkAccessManager *m_net;
+
+    // Trạng thái prefetch offline.
+    struct PrefetchJob { int z, x, y; };
+    std::vector<PrefetchJob> m_pfJobs;
+    TileProvider m_pfProvider;
+    size_t m_pfNext = 0;
+    int m_pfInflight = 0;
+    int m_pfOk = 0;    // tải mới về đĩa
+    int m_pfSkip = 0;  // đã có sẵn trong cache
+    int m_pfFail = 0;  // lỗi (thường do mất mạng)
+    QString m_pfLastError;
+    bool m_pfActive = false;
 };
 
 class MapWidget : public QWidget {
@@ -104,6 +134,12 @@ private:
     void stopSim();
     void simStep();
     void onUpload();
+    void downloadVietnam();
+    void downloadCurrentView();
+    void startOfflineDownload(double w, double s, double e, double n,
+                              int zmin, int zmax, const QString &what);
+    void onPrefetchProgress(int done, int total);
+    void onPrefetchDone(int saved, int skipped, int failed, bool canceled);
     static double dist(std::pair<double, double> a, std::pair<double, double> b);
 
     TileProvider m_provider;
@@ -143,6 +179,7 @@ private:
     QComboBox *m_speedCombo = nullptr;
     QStackedWidget *m_stack = nullptr;
     MapCanvas *m_canvas = nullptr;
+    QProgressDialog *m_offlineProgress = nullptr;
 };
 
 } // namespace gcs::ui
