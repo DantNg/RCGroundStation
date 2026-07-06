@@ -142,7 +142,7 @@ pre-arm **error** in the message log and banner — exactly like Mission Planner
 ### Connect to a real vehicle
 
 - **Serial**: choose *Serial*, pick the COM port / `/dev/ttyUSB*`, set the baud
-  (telemetry radios are usually `57600`), Connect.
+  (telemetry radios are usually `115200`), Connect.
 - **UDP**: point SITL or the ESP32's WiFi-forward at this machine's UDP `14550`.
 - **TCP**: SITL on `127.0.0.1:5760`.
 

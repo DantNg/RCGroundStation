@@ -100,7 +100,7 @@ QWidget *ConnectionBar::buildSerial()
     connect(refresh, &QPushButton::clicked, this, &ConnectionBar::refreshPorts);
     m_baud = new QComboBox;
     m_baud->addItems(kBauds);
-    m_baud->setCurrentText(QStringLiteral("57600"));
+    m_baud->setCurrentText(QStringLiteral("115200"));
     row->addWidget(new QLabel(QStringLiteral("Cổng:")));
     row->addWidget(m_port);
     row->addWidget(refresh);

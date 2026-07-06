@@ -1,0 +1,8 @@
+{
+    "Enabled" : true,
+    "UrlTemplate" : "https://tile.openstreetmap.org/%z/%x/%y.png",
+    "ImageFormat" : "png",
+    "MaximumZoomLevel" : 19,
+    "MapCopyRight" : "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors",
+    "DataCopyRight" : "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"
+}

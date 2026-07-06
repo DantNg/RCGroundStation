@@ -1,36 +1,33 @@
 cmake_minimum_required(VERSION 3.21)
 project(LiteGCS LANGUAGES CXX)
 
-# ── Trạm điều khiển mặt đất (Lite Ground Station) — bản C++/Qt ────────────────
-# Bản dựng lại bằng C++ của ứng dụng Python/PySide6, tối ưu để chạy trên
-# Raspberry Pi. Kiến trúc SOLID được giữ nguyên: domain / interfaces / mavlink /
-# app / ui.
+# ── Trạm điều khiển mặt đất (Lite Ground Station) — bản C++/Qt, UI QML ─────────
+# Lớp UI dựng bằng QML/Qt Quick theo mockup "GroundController Handheld" (bản đồ 2D
+# vệ tinh + PFD + camera FPV). Backend C++ giữ nguyên kiến trúc SOLID: domain /
+# interfaces / mavlink / app; hai lớp cầu nối (src/bridge) lộ ra cho QML.
+#
+# Bản Qt Widgets cũ vẫn còn trên đĩa (src/ui, main_widgets.cpp) để tham chiếu,
+# nhưng KHÔNG còn được build — QML là giao diện chính.
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
-set(CMAKE_AUTOUIC ON)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
 find_package(Qt6 REQUIRED COMPONENTS
-    Core Gui Widgets Network SerialPort
-    Multimedia MultimediaWidgets WebChannel)
+    Core Gui Qml Quick QuickControls2
+    Location Positioning Multimedia
+    Network SerialPort)
 
-# Cesium 3D cần Qt WebEngine. Có trên Linux/Pi (GCC) và MSVC, nhưng KHÔNG có ở
-# bản Qt cho MinGW trên Windows. Vì vậy nó là tuỳ chọn: nếu thiếu, quả cầu 3D
-# hiện một placeholder còn phần còn lại của ứng dụng vẫn chạy đầy đủ.
-find_package(Qt6 QUIET COMPONENTS WebEngineWidgets)
+qt_standard_project_setup(REQUIRES 6.5)
 
-qt_standard_project_setup()
-
+# ── nguồn backend + cầu nối (không có Qt Widgets) ─────────────────────────────
 set(SOURCES
     main.cpp
-
-    resources.qrc
 
     src/config.cpp
 
@@ -48,27 +45,8 @@ set(SOURCES
     src/app/link_manager.cpp
     src/app/controller.cpp
 
-    src/vision/motion_detector.cpp
-    src/vision/centroid_tracker.cpp
-    src/vision/centering_policy.cpp
-    src/vision/vision_pipeline.cpp
-
-    src/ui/theme.cpp
-    src/ui/video_display.cpp
-    src/ui/acrylic.cpp
-    src/ui/widgets.cpp
-    src/ui/overlay_stage.cpp
-    src/ui/round_hud.cpp
-    src/ui/warning_overlay.cpp
-    src/ui/messages_panel.cpp
-    src/ui/mode_rail.cpp
-    src/ui/waypoint_editor.cpp
-    src/ui/connection_bar.cpp
-    src/ui/top_bar.cpp
-    src/ui/camera_view.cpp
-    src/ui/cesium_view.cpp
-    src/ui/map_widget.cpp
-    src/ui/main_window.cpp
+    src/bridge/telemetry_view_model.cpp
+    src/bridge/backend.cpp
 )
 
 qt_add_executable(LiteGCS WIN32 ${SOURCES})
@@ -82,22 +60,43 @@ target_include_directories(LiteGCS SYSTEM PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/mavlink
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/mavlink/ardupilotmega)
 
+# ── module QML "GroundCtrl" ───────────────────────────────────────────────────
+# RESOURCE_PREFIX /qt/qml là BẮT BUỘC để loadFromModule("GroundCtrl","Main") tìm
+# được type Main; Theme là singleton (pragma Singleton + thuộc tính dưới đây).
+set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+
+qt_add_qml_module(LiteGCS
+    URI GroundCtrl
+    VERSION 1.0
+    RESOURCE_PREFIX /qt/qml
+    QML_FILES
+        qml/Theme.qml
+        qml/Main.qml
+        qml/StatusBar.qml
+        qml/MainView.qml
+        qml/SatelliteMap.qml
+        qml/CameraView.qml
+        qml/HudView.qml
+        qml/ModeRail.qml
+        qml/TelemetryStrip.qml
+        qml/ConnectionCard.qml
+        qml/WarningBanners.qml
+    RESOURCES
+        qml/fonts/JetBrainsMono-Regular.ttf
+        qml/fonts/ChakraPetch-Medium.ttf
+        qml/fonts/ChakraPetch-Bold.ttf
+)
+
 target_link_libraries(LiteGCS PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::SerialPort
-    Qt6::Multimedia Qt6::MultimediaWidgets Qt6::WebChannel)
+    Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
+    Qt6::Location Qt6::Positioning Qt6::Multimedia
+    Qt6::Network Qt6::SerialPort)
 
-if(Qt6WebEngineWidgets_FOUND)
-    message(STATUS "Qt WebEngine tìm thấy — bật quả cầu Cesium 3D")
-    target_compile_definitions(LiteGCS PRIVATE HAVE_WEBENGINE)
-    target_link_libraries(LiteGCS PRIVATE Qt6::WebEngineWidgets)
-else()
-    message(WARNING "Không có Qt WebEngine — chế độ 3D sẽ hiển thị placeholder")
-endif()
-
-# Vendored Cesium globe + page. Re-use the exact same assets the Python app
-# serves; copy them next to the binary so the localhost server can find them.
+# ── định nghĩa nhà cung cấp tile bản đồ (Esri vệ tinh + OSM) ──────────────────
+# main.cpp trỏ osm.mapping.providersrepository.address tới thư mục này (cạnh
+# binary); plugin OSM đọc file "satellite"/"street" từ đây.
 add_custom_command(TARGET LiteGCS POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_CURRENT_SOURCE_DIR}/../gcs/ui/assets
-        $<TARGET_FILE_DIR:LiteGCS>/assets
-    COMMENT "Sao chép tài nguyên Cesium (bản đồ 3D)")
+        ${CMAKE_CURRENT_SOURCE_DIR}/providers
+        $<TARGET_FILE_DIR:LiteGCS>/providers
+    COMMENT "Sao chép định nghĩa nhà cung cấp tile (Esri vệ tinh / OSM)")

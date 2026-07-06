@@ -68,8 +68,7 @@ const std::vector<QuickMode> &quickModes()
     static const std::vector<QuickMode> modes = {
         {"LOITER", "LOITER", QStringLiteral("Giữ vị trí (GPS) — phi công có thể chỉnh")},
         {"STAB",   "STABILIZE", QStringLiteral("Stabilize — điều khiển tay có tự cân bằng")},
-        {"ALTH",   "ALT_HOLD", QStringLiteral("Giữ độ cao — giữ cao độ, tay ngang")},
-        {"LAND",   "LAND", QStringLiteral("Hạ cánh — hạ xuống và disarm khi chạm đất")},
+        {"ALTH",   "ALT_HOLD", QStringLiteral("Giữ độ cao — giữ cao độ, tay ngang")}
     };
     return modes;
 }

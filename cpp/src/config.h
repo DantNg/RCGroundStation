@@ -11,7 +11,7 @@ namespace gcs {
 struct AppConfig {
     QString connectionType = QStringLiteral("serial"); // "serial" | "udp" | "tcp"
     QString serialPort;
-    int baud = 57600;
+    int baud = 115200;
     int udpPort = 14550;
     QString tcpHost = QStringLiteral("127.0.0.1");
     int tcpPort = 5760;
