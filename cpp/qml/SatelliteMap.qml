@@ -48,10 +48,10 @@ Item {
         // Tâm KHÔNG bind cứng vào telemetry (sẽ chống lại thao tác kéo). Đặt tâm
         // ban đầu; sau đó Connections ở trên tự bám khi follow=true, còn kéo tay
         // thì tắt follow.
-        // Zoom tối đa 19 = trần cứng của plugin OSM (Qt Location). Bắt đầu ở 18
-        // cho vùng bay hẹp.
+        // Trần zoom = MaximumZoomLevel trong providers/satellite (Esri có tile
+        // tới ~z21-23 ở đô thị). Bắt đầu ở 18 cho vùng bay hẹp.
         zoomLevel: 18
-        maximumZoomLevel: 19
+        maximumZoomLevel: 21
 
         // kéo để di chuyển bản đồ (tự tắt bám phương tiện)
         DragHandler {
@@ -167,8 +167,59 @@ Item {
             }
         }
 
+        // ── waypoint chia sẻ qua cầu nối (marker NHẤP NHÁY, chỉ hiện ở trạm
+        //    giám sát nhận được — trạm đang chọn không tự nhận lại) ───────────
+        MapQuickItem {
+            id: sharedWp
+            visible: telemetry.sharedWpValid
+            coordinate: telemetry.sharedWpValid
+                        ? QtPositioning.coordinate(telemetry.sharedWpLat, telemetry.sharedWpLon)
+                        : QtPositioning.coordinate()
+            anchorPoint.x: 21; anchorPoint.y: 21
+            sourceItem: Item {
+                width: 42; height: 42
+                // vòng xung lan toả để gây chú ý
+                Rectangle {
+                    id: pulse
+                    anchors.centerIn: parent
+                    width: 16; height: 16; radius: 8
+                    color: "transparent"; border.color: Theme.warn; border.width: 2
+                    ParallelAnimation {
+                        running: sharedWp.visible; loops: Animation.Infinite
+                        NumberAnimation { target: pulse; property: "scale"; from: 0.5; to: 2.6
+                                          duration: 1000; easing.type: Easing.OutQuad }
+                        NumberAnimation { target: pulse; property: "opacity"; from: 0.9; to: 0.0
+                                          duration: 1000 }
+                    }
+                }
+                // chấm tâm chớp tắt
+                Rectangle {
+                    id: dot
+                    anchors.centerIn: parent
+                    width: 14; height: 14; radius: 7
+                    color: Theme.warn; border.color: "#ffffff"; border.width: 1
+                    SequentialAnimation on opacity {
+                        running: sharedWp.visible; loops: Animation.Infinite
+                        NumberAnimation { from: 1.0; to: 0.3; duration: 500 }
+                        NumberAnimation { from: 0.3; to: 1.0; duration: 500 }
+                    }
+                }
+                Text {
+                    text: "WP"; color: Theme.warn
+                    font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 1
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.top: parent.top
+                }
+            }
+        }
+
         TapHandler {
-            onTapped: (ep) => root.gotoCoord = map.toCoordinate(ep.position)
+            onTapped: (ep) => {
+                root.gotoCoord = map.toCoordinate(ep.position);
+                // chia sẻ điểm vừa chọn ra mạng cầu nối (no-op nếu cầu nối tắt)
+                const alt = telemetry.altRel > 1 ? telemetry.altRel : 30;
+                backend.shareWaypoint(root.gotoCoord.latitude, root.gotoCoord.longitude, alt);
+            }
         }
     }
 
@@ -275,6 +326,7 @@ Item {
                         const alt = telemetry.altRel > 1 ? telemetry.altRel : 30;
                         backend.flyTo(root.gotoCoord.latitude, root.gotoCoord.longitude, alt);
                         root.gotoCoord = null;
+                        backend.clearSharedWaypoint(); // đã bay tới — thôi chia sẻ điểm chọn
                     }
                 }
             }
@@ -285,7 +337,7 @@ Item {
                 Text { id: cxTxt; anchors.centerIn: parent; text: "HUỶ"
                        color: "#b9b7c2"; font.family: Theme.mono; font.pixelSize: 10; font.letterSpacing: 0.6 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                            onClicked: root.gotoCoord = null }
+                            onClicked: { root.gotoCoord = null; backend.clearSharedWaypoint(); } }
             }
         }
     }

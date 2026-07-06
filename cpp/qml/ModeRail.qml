@@ -80,7 +80,7 @@ Rectangle {
         Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.strokeSoft }
 
         ActionBtn {
-            glyph: "▲"; label: "CẤT CÁNH"; sub: "GUIDED · " + root.takeoffAlt + "m · chạm để chỉnh"; tint: Theme.accent
+            glyph: "▲"; label: "CẤT CÁNH"; sub: "chạm để chỉnh"; tint: Theme.accent
             onActivated: takeoffDlg.open()
         }
         ActionBtn {

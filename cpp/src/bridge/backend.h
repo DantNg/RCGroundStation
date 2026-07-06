@@ -52,6 +52,11 @@ public:
     // kết nối) lẫn cho các lần kết nối sau.
     Q_INVOKABLE void setBridgeMode(bool enabled, int port);
 
+    // Chia sẻ điểm waypoint đang chọn trên bản đồ ra mạng cầu nối (trạm giám sát
+    // sẽ thấy marker nhấp nháy). ``clearSharedWaypoint`` khi huỷ chọn.
+    Q_INVOKABLE void shareWaypoint(double lat, double lon, double altRel);
+    Q_INVOKABLE void clearSharedWaypoint();
+
 signals:
     void bridgeChanged();
 

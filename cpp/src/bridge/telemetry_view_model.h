@@ -45,6 +45,11 @@ class TelemetryViewModel : public QObject {
     Q_PROPERTY(double lon READ lon NOTIFY positionChanged)
     Q_PROPERTY(bool posValid READ posValid NOTIFY positionChanged)
 
+    // ── waypoint chia sẻ qua cầu nối (trạm giám sát vẽ marker nhấp nháy) ──────
+    Q_PROPERTY(bool sharedWpValid READ sharedWpValid NOTIFY sharedWaypointChanged)
+    Q_PROPERTY(double sharedWpLat READ sharedWpLat NOTIFY sharedWaypointChanged)
+    Q_PROPERTY(double sharedWpLon READ sharedWpLon NOTIFY sharedWaypointChanged)
+
     // ── khí động (VFR) ──────────────────────────────────────────────────────
     Q_PROPERTY(double airspeed READ airspeed NOTIFY vfrChanged)
     Q_PROPERTY(double groundspeed READ groundspeed NOTIFY vfrChanged)
@@ -81,6 +86,10 @@ public:
     double lon() const { return m_lon; }
     bool posValid() const { return m_posValid; }
 
+    bool sharedWpValid() const { return m_sharedWpValid; }
+    double sharedWpLat() const { return m_sharedWpLat; }
+    double sharedWpLon() const { return m_sharedWpLon; }
+
     double airspeed() const { return m_airspeed; }
     double groundspeed() const { return m_groundspeed; }
 
@@ -101,6 +110,7 @@ signals:
     void armElapsedChanged();
     void attitudeChanged();
     void positionChanged();
+    void sharedWaypointChanged();
     void vfrChanged();
     void gpsChanged();
     void batteryChanged();
@@ -127,6 +137,8 @@ private:
     double m_roll = 0.0, m_pitch = 0.0, m_heading = 0.0;
     double m_altRel = 0.0, m_altMsl = 0.0, m_lat = 0.0, m_lon = 0.0;
     bool m_posValid = false;
+    bool m_sharedWpValid = false;
+    double m_sharedWpLat = 0.0, m_sharedWpLon = 0.0;
     double m_airspeed = 0.0, m_groundspeed = 0.0;
     int m_satellites = 0;
     QString m_fixLabel = QStringLiteral("Không GPS");

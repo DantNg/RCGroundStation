@@ -21,8 +21,10 @@
 
 #include <atomic>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
+#include <mutex>
 
 class QUdpSocket;
 
@@ -43,6 +45,13 @@ public:
     void configure(bool enabled, uint16_t port, bool allowUplink);
     bool enabled() const { return m_enabled.load(); }
 
+    // ── chia sẻ điểm waypoint đang chọn (an toàn-luồng) ───────────────────────
+    // Broadcast toạ độ điểm operator chọn để trạm giám sát thấy; ``clearWaypoint``
+    // báo đã huỷ chọn. Không làm gì nếu cầu nối đang tắt. Byte thật được gửi ở
+    // service() trên luồng worker.
+    void shareWaypoint(double lat, double lon, double altRel);
+    void clearWaypoint();
+
     // ── chỉ gọi trên luồng link-worker ────────────────────────────────────────
     // Đồng bộ socket với cờ enabled (mở/đóng khi đổi), rồi rút mọi gói máy tính
     // gửi về và (nếu cho phép uplink) tiêm vào phương tiện qua ``inject``.
@@ -54,6 +63,7 @@ public:
 
 private:
     void ensureOpen(const NoticeFn &notice);
+    void queueFrame(const MavMessage &msg); // đóng gói + xếp hàng broadcast (an toàn-luồng)
 
     std::atomic<bool> m_enabled{false};
     std::atomic<uint16_t> m_port{14550};
@@ -61,6 +71,10 @@ private:
 
     std::unique_ptr<QUdpSocket> m_socket; // chỉ luồng worker chạm vào
     bool m_bindFailed = false;            // đã báo lỗi bind — tránh spam
+
+    // Khung do luồng giao diện xếp (chia sẻ waypoint) → worker rút ra broadcast.
+    std::mutex m_txMutex;
+    std::deque<QByteArray> m_txQueue;
 };
 
 } // namespace gcs::mavlink

@@ -87,6 +87,16 @@ void Backend::setBridgeMode(bool enabled, int port)
     emit bridgeChanged();
 }
 
+void Backend::shareWaypoint(double lat, double lon, double altRel)
+{
+    m_controller->shareWaypoint(lat, lon, altRel);
+}
+
+void Backend::clearSharedWaypoint()
+{
+    m_controller->clearSharedWaypoint();
+}
+
 void Backend::arm(bool force) { m_controller->commands().arm(force); }
 void Backend::disarm(bool force) { m_controller->commands().disarm(force); }
 void Backend::setMode(const QString &modeName) { m_controller->commands().setModeByName(modeName); }

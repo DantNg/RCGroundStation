@@ -2,7 +2,7 @@
     "Enabled" : true,
     "UrlTemplate" : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/%z/%y/%x",
     "ImageFormat" : "jpg",
-    "MaximumZoomLevel" : 19,
+    "MaximumZoomLevel" : 21,
     "MapCopyRight" : "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
     "DataCopyRight" : "Esri, Maxar, Earthstar Geographics"
 }

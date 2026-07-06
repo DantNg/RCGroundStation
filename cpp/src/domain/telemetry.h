@@ -114,6 +114,18 @@ struct FlightModeInfo {
     int64_t updatedMs = 0;
 };
 
+// Điểm waypoint được một trạm KHÁC chia sẻ qua chế độ cầu nối (Wi-Fi). Trạm cầm
+// tay chọn điểm trên bản đồ → broadcast SET_POSITION_TARGET_GLOBAL_INT; trạm
+// giám sát (máy tính) nhận, dựng marker nhấp nháy tại đây. ``valid=false`` nghĩa
+// là điểm đã bị huỷ chọn.
+struct SharedWaypoint {
+    double lat = 0.0;
+    double lon = 0.0;
+    double altRel = 0.0;
+    bool valid = false;
+    int64_t updatedMs = 0;
+};
+
 // Sức khoẻ đường truyền phía nhận (do link worker duy trì).
 struct LinkStats {
     uint64_t framesReceived = 0;
@@ -146,6 +158,7 @@ struct TelemetrySnapshot {
     FlightModeInfo mode;
     LinkStats link;
     StatusText status;
+    SharedWaypoint sharedWaypoint;
     bool heartbeatSeen = false;
     int64_t lastHeartbeatMs = 0;
 };

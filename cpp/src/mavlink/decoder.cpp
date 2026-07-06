@@ -170,6 +170,25 @@ void TelemetryDecoder::handle(const MavMessage &msg)
         m_onNotice(st);
         break;
     }
+    case MAVLINK_MSG_ID_SET_POSITION_TARGET_GLOBAL_INT: {
+        // Không phải do phương tiện phát (phương tiện gửi POSITION_TARGET, id
+        // khác) — đây là điểm waypoint một trạm cầm tay chia sẻ qua cầu nối. Ba
+        // bit thấp của type_mask = 0 nghĩa là vị trí hợp lệ; khác đi (vd 0xFFFF)
+        // là tín hiệu huỷ chọn.
+        mavlink_set_position_target_global_int_t m;
+        mavlink_msg_set_position_target_global_int_decode(&msg, &m);
+        const bool valid = (m.type_mask & 0x7) == 0;
+        m_store->mutate([&](TelemetrySnapshot &s) {
+            s.sharedWaypoint.valid = valid;
+            if (valid) {
+                s.sharedWaypoint.lat = m.lat_int / 1e7;
+                s.sharedWaypoint.lon = m.lon_int / 1e7;
+                s.sharedWaypoint.altRel = m.alt;
+            }
+            s.sharedWaypoint.updatedMs = now;
+        });
+        break;
+    }
     case MAVLINK_MSG_ID_COMMAND_ACK: {
         mavlink_command_ack_t m;
         mavlink_msg_command_ack_decode(&msg, &m);

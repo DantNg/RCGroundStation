@@ -40,6 +40,11 @@ public:
     void setBridgeMode(bool enabled, int port);
     bool bridgeEnabled() const { return m_linkManager.bridgeEnabled(); }
 
+    // Chia sẻ / huỷ điểm waypoint operator chọn ra mạng cầu nối (để trạm giám
+    // sát thấy). Không tác dụng nếu cầu nối đang tắt.
+    void shareWaypoint(double lat, double lon, double altRel) { m_linkManager.shareWaypoint(lat, lon, altRel); }
+    void clearSharedWaypoint() { m_linkManager.clearSharedWaypoint(); }
+
     // ── đọc cho giao diện ──────────────────────────────────────────────────────
     domain::TelemetrySnapshot snapshot() const { return m_store.snapshot(); }
     std::vector<domain::StatusText> drainNotices();

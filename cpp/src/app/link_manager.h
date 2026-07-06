@@ -45,6 +45,10 @@ public:
     void setBridge(bool enabled, int port, bool allowUplink);
     bool bridgeEnabled() const { return m_bridge.enabled(); }
 
+    // Chia sẻ điểm waypoint đang chọn ra mạng (nếu cầu nối bật). An toàn-luồng.
+    void shareWaypoint(double lat, double lon, double altRel) { m_bridge.shareWaypoint(lat, lon, altRel); }
+    void clearSharedWaypoint() { m_bridge.clearWaypoint(); }
+
 private:
     void run();
     void writeStats(uint64_t frames, uint64_t bytes, uint64_t errors,

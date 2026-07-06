@@ -108,6 +108,16 @@ void TelemetryViewModel::poll()
         emit positionChanged();
     }
 
+    // ── waypoint chia sẻ (cầu nối) ──────────────────────────────────────────
+    if (s.sharedWaypoint.valid != m_sharedWpValid
+        || s.sharedWaypoint.lat != m_sharedWpLat
+        || s.sharedWaypoint.lon != m_sharedWpLon) {
+        m_sharedWpValid = s.sharedWaypoint.valid;
+        m_sharedWpLat = s.sharedWaypoint.lat;
+        m_sharedWpLon = s.sharedWaypoint.lon;
+        emit sharedWaypointChanged();
+    }
+
     // ── VFR ─────────────────────────────────────────────────────────────────
     if (s.vfr.airspeed != m_airspeed || s.vfr.groundspeed != m_groundspeed) {
         m_airspeed = s.vfr.airspeed; m_groundspeed = s.vfr.groundspeed;
