@@ -21,11 +21,16 @@ class Backend : public QObject {
     Q_OBJECT
     // Danh sách chế độ nhanh: mỗi phần tử là { label, mode, desc }.
     Q_PROPERTY(QVariantList quickModes READ quickModes CONSTANT)
+    // Chế độ cầu nối MAVLink (chuyển tiếp qua Wi-Fi cho máy tính đọc).
+    Q_PROPERTY(bool bridgeEnabled READ bridgeEnabled NOTIFY bridgeChanged)
+    Q_PROPERTY(int bridgePort READ bridgePort NOTIFY bridgeChanged)
 
 public:
     explicit Backend(app::GcsController *controller, AppConfig config, QObject *parent = nullptr);
 
     QVariantList quickModes() const;
+    bool bridgeEnabled() const { return m_config.bridgeEnabled; }
+    int bridgePort() const { return m_config.bridgePort; }
 
     // ── liên kết ────────────────────────────────────────────────────────────
     Q_INVOKABLE QStringList serialPorts() const;
@@ -41,6 +46,14 @@ public:
     Q_INVOKABLE void takeoff(double altitudeM);
     Q_INVOKABLE void flyTo(double lat, double lon, double altRel);
     Q_INVOKABLE void startMission();
+
+    // ── chế độ cầu nối ────────────────────────────────────────────────────────
+    // Bật/tắt và đặt cổng broadcast. Lưu vào cấu hình và áp dụng ngay (nếu đang
+    // kết nối) lẫn cho các lần kết nối sau.
+    Q_INVOKABLE void setBridgeMode(bool enabled, int port);
+
+signals:
+    void bridgeChanged();
 
 private:
     void openWith(AppConfig cfg);

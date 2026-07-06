@@ -45,6 +45,11 @@ void GcsController::connect(const QString &connectionString, int baud, const QSt
     m_linkManager.start(std::make_unique<mavlink::MavlinkLink>(connectionString, baud, label));
 }
 
+void GcsController::setBridgeMode(bool enabled, int port)
+{
+    m_linkManager.setBridge(enabled, port, m_authority.canControl);
+}
+
 void GcsController::disconnect()
 {
     if (m_linkManager.link() != nullptr)

@@ -1,9 +1,11 @@
 // Cửa sổ chính — bố cục "GroundController Handheld".
 //
-// Khung thiết bị cố định 800×480 (đúng tỉ lệ mockup, hợp màn cầm tay / Raspberry
-// Pi), tự scale để vừa cửa sổ. Ba tầng: thanh trạng thái (trên) · hàng giữa
-// [vùng xem chính | thanh chế độ 134px] · dải telemetry (dưới). Vùng xem chính
-// chuyển đổi MAP (vệ tinh 2D) / CAM (FPV) / HUD (PFD) qua ô PiP.
+// Khung thiết bị nền 853×480 — tỉ lệ 16:9 để lấp ĐẦY màn 1280×720 (và các màn
+// 16:9 khác) khi scale-to-fit, không còn viền đen hai bên như bản 800×480 cũ.
+// Chiều cao vẫn 480 nên mọi thanh/cỡ chữ giữ nguyên tinh thần mockup; chỉ vùng
+// xem chính rộng thêm. Ba tầng: thanh trạng thái (trên) · hàng giữa [vùng xem
+// chính | thanh chế độ 134px] · dải telemetry (dưới). Vùng xem chính chuyển đổi
+// MAP (vệ tinh 2D) / CAM (FPV) / HUD (PFD) qua ô PiP.
 //
 // Số liệu bind vào context property `telemetry`; lệnh gọi qua `backend`.
 import QtQuick
@@ -15,9 +17,9 @@ import GroundCtrl
 ApplicationWindow {
     id: win
     visible: true
-    width: 800
-    height: 480
-    minimumWidth: 480
+    width: 1280
+    height: 720
+    minimumWidth: 512
     minimumHeight: 288
     color: Theme.deepBg
     title: "Trạm Điều Khiển Mặt Đất — QML"
@@ -38,10 +40,10 @@ ApplicationWindow {
         id: viewport
         anchors.fill: parent
 
-        // ── "thiết bị" 800×480, scale-to-fit, bo góc ───────────────────────
+        // ── "thiết bị" 853×480 (16:9), scale-to-fit, bo góc ─────────────────
         Rectangle {
             id: device
-            width: 800
+            width: 853.333          // 480 × 16/9 → lấp đầy màn 16:9 (vd 1280×720)
             height: 480
             anchors.centerIn: parent
             scale: Math.min(viewport.width / width, viewport.height / height)

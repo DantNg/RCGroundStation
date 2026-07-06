@@ -55,6 +55,7 @@ public:
     void sendHeartbeat() override;
     void missionCount(int count, int missionType) override;
     void missionItemInt(const interfaces::MissionItem &item) override;
+    void sendRawFrame(const QByteArray &frame) override;
 
 private:
     enum class Kind { Serial, Udp, Tcp };

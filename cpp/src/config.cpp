@@ -49,6 +49,8 @@ AppConfig AppConfig::load()
     if (o.contains("tcp_host"))        cfg.tcpHost = o.value("tcp_host").toString(cfg.tcpHost);
     if (o.contains("tcp_port"))        cfg.tcpPort = o.value("tcp_port").toInt(cfg.tcpPort);
     if (o.contains("role"))            cfg.role = o.value("role").toString(cfg.role);
+    if (o.contains("bridge_enabled"))  cfg.bridgeEnabled = o.value("bridge_enabled").toBool(cfg.bridgeEnabled);
+    if (o.contains("bridge_port"))     cfg.bridgePort = o.value("bridge_port").toInt(cfg.bridgePort);
     return cfg;
 }
 
@@ -63,6 +65,8 @@ void AppConfig::save() const
     o["tcp_host"] = tcpHost;
     o["tcp_port"] = tcpPort;
     o["role"] = role;
+    o["bridge_enabled"] = bridgeEnabled;
+    o["bridge_port"] = bridgePort;
     QFile f(configPath());
     if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
         f.write(QJsonDocument(o).toJson(QJsonDocument::Indented));

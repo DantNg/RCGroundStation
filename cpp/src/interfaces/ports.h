@@ -8,6 +8,7 @@
 
 #include "mavlink/mav_message.h"
 
+#include <QByteArray>
 #include <QString>
 #include <optional>
 #include <utility>
@@ -78,6 +79,11 @@ public:
     // ── nguyên thủy tải nhiệm vụ (giao thức MISSION) ─────────────────────────
     virtual void missionCount(int count, int missionType = 0) = 0;
     virtual void missionItemInt(const MissionItem &item) = 0;
+
+    // Chuyển tiếp một khung MAVLink thô (đã đóng gói đầy đủ) tới phương tiện —
+    // dùng cho chế độ cầu nối khi tiêm gói từ một GCS ngoài (máy tính). Không
+    // diễn giải nội dung, không kiểm tra mục tiêu.
+    virtual void sendRawFrame(const QByteArray &frame) = 0;
 };
 
 } // namespace gcs::interfaces

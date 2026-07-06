@@ -67,4 +67,12 @@ void AuthorityGuardedSink::missionItemInt(const MissionItem &item)
         s->missionItemInt(item);
 }
 
+void AuthorityGuardedSink::sendRawFrame(const QByteArray &frame)
+{
+    // Khung thô từ GCS ngoài (cầu nối) vẫn phải qua cửa quyền: chỉ cấp được điều
+    // khiển mới cho tiêm về phương tiện.
+    if (auto *s = pass())
+        s->sendRawFrame(frame);
+}
+
 } // namespace gcs::interfaces

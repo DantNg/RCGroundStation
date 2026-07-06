@@ -381,4 +381,14 @@ void MavlinkLink::missionItemInt(const interfaces::MissionItem &item)
     enqueue(msg);
 }
 
+void MavlinkLink::sendRawFrame(const QByteArray &frame)
+{
+    // Bơm thẳng byte đã đóng gói (từ GCS ngoài, chế độ cầu nối) vào outbox —
+    // luồng worker sẽ ghi ra transport ở drainOutbox() như mọi gói khác.
+    if (frame.isEmpty())
+        return;
+    std::lock_guard<std::mutex> lock(m_outboxMutex);
+    m_outbox.push_back(frame);
+}
+
 } // namespace gcs::mavlink

@@ -34,6 +34,12 @@ public:
     void disconnect();
     bool isConnected() const { return m_linkManager.link() != nullptr; }
 
+    // ── chế độ cầu nối MAVLink (chuyển tiếp qua Wi-Fi) ────────────────────────
+    // Uplink (máy tính → phương tiện) chỉ mở khi vai trò của trạm được điều
+    // khiển — trạm chỉ-xem vẫn broadcast telemetry nhưng không cho tiêm lệnh về.
+    void setBridgeMode(bool enabled, int port);
+    bool bridgeEnabled() const { return m_linkManager.bridgeEnabled(); }
+
     // ── đọc cho giao diện ──────────────────────────────────────────────────────
     domain::TelemetrySnapshot snapshot() const { return m_store.snapshot(); }
     std::vector<domain::StatusText> drainNotices();

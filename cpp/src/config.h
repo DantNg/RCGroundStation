@@ -20,6 +20,10 @@ struct AppConfig {
     // "viewer". Quyết định quyền điều khiển (xem domain/roles.h).
     QString role = QStringLiteral("admin");
 
+    // ── chế độ cầu nối (chuyển tiếp MAVLink ra Wi-Fi cho máy tính đọc) ─────────
+    bool bridgeEnabled = false;
+    int bridgePort = 14550; // cổng UDP broadcast (mặc định GCS của Mission Planner)
+
     // Chuỗi/nhãn kết nối cho transport đã chọn.
     QString connectionString() const;
     QString label() const;

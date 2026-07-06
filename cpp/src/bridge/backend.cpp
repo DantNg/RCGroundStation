@@ -10,6 +10,8 @@ namespace gcs::bridge {
 Backend::Backend(app::GcsController *controller, AppConfig config, QObject *parent)
     : QObject(parent), m_controller(controller), m_config(std::move(config))
 {
+    // Áp cấu hình cầu nối đã lưu để nó có hiệu lực ngay khi link được mở.
+    m_controller->setBridgeMode(m_config.bridgeEnabled, m_config.bridgePort);
 }
 
 QVariantList Backend::quickModes() const
@@ -74,6 +76,15 @@ void Backend::connectSerial(const QString &portName, int baud)
 void Backend::disconnect()
 {
     m_controller->disconnect();
+}
+
+void Backend::setBridgeMode(bool enabled, int port)
+{
+    m_config.bridgeEnabled = enabled;
+    m_config.bridgePort = port;
+    m_config.save();
+    m_controller->setBridgeMode(enabled, port);
+    emit bridgeChanged();
 }
 
 void Backend::arm(bool force) { m_controller->commands().arm(force); }

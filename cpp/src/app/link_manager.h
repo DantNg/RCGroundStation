@@ -9,6 +9,7 @@
 #include "domain/telemetry.h"
 #include "interfaces/ports.h"
 #include "mavlink/decoder.h"
+#include "mavlink/mavlink_bridge.h"
 
 #include <atomic>
 #include <functional>
@@ -38,6 +39,12 @@ public:
     void start(std::unique_ptr<interfaces::ITelemetryLink> link);
     void stop();
 
+    // ── chế độ cầu nối (chuyển tiếp MAVLink qua Wi-Fi) ────────────────────────
+    // An toàn-luồng: chỉ đặt cờ; luồng worker áp dụng ở vòng lặp kế. ``allowUplink``
+    // do quyền của trạm quyết định (chỉ cấp điều khiển mới cho máy tính gửi về).
+    void setBridge(bool enabled, int port, bool allowUplink);
+    bool bridgeEnabled() const { return m_bridge.enabled(); }
+
 private:
     void run();
     void writeStats(uint64_t frames, uint64_t bytes, uint64_t errors,
@@ -50,6 +57,7 @@ private:
     std::thread m_thread;
     std::atomic<bool> m_stop{false};
     MessageObserver m_observer;
+    mavlink::MavlinkBridge m_bridge;
 };
 
 } // namespace gcs::app

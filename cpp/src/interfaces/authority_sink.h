@@ -33,6 +33,7 @@ public:
     void sendHeartbeat() override;
     void missionCount(int count, int missionType = 0) override;
     void missionItemInt(const MissionItem &item) override;
+    void sendRawFrame(const QByteArray &frame) override;
 
 private:
     // Trả về sink thật nếu được phép ghi; ngược lại nullptr (và báo, có tiết chế).

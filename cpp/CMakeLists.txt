@@ -37,6 +37,7 @@ set(SOURCES
     src/interfaces/authority_sink.cpp
 
     src/mavlink/mavlink_link.cpp
+    src/mavlink/mavlink_bridge.cpp
     src/mavlink/decoder.cpp
     src/mavlink/command_service.cpp
     src/mavlink/mission_service.cpp

@@ -98,6 +98,53 @@ Rectangle {
             }
         }
 
+        // ── chế độ cầu nối: phát MAVLink ra Wi-Fi cho máy tính (MP/QGC) đọc ──
+        Rectangle {
+            Layout.fillWidth: true
+            radius: 8
+            color: Theme.panelSolid
+            border.color: bridgeSwitch.checked ? Theme.accent : Theme.stroke
+            implicitHeight: bridgeCol.implicitHeight + 20
+
+            ColumnLayout {
+                id: bridgeCol
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 6
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    ColumnLayout {
+                        spacing: 0
+                        Text { text: "CHẾ ĐỘ CẦU NỐI"; color: Theme.text
+                               font.family: Theme.mono; font.pixelSize: 12; font.bold: true }
+                        Text { text: "Phát MAVLink ra Wi-Fi cho máy tính"; color: Theme.dim
+                               font.family: Theme.mono; font.pixelSize: 10 }
+                    }
+                    Item { Layout.fillWidth: true }
+                    Switch {
+                        id: bridgeSwitch
+                        checked: backend.bridgeEnabled
+                        onToggled: backend.setBridgeMode(checked, bridgePort.value)
+                    }
+                }
+
+                RowLayout {
+                    visible: bridgeSwitch.checked
+                    Layout.fillWidth: true; spacing: 8
+                    Label { text: "Cổng broadcast"; color: Theme.dim
+                            font.family: Theme.mono; font.pixelSize: 12 }
+                    SpinBox {
+                        id: bridgePort
+                        from: 1; to: 65535; value: backend.bridgePort; editable: true
+                        Layout.fillWidth: true
+                        onValueModified: if (bridgeSwitch.checked) backend.setBridgeMode(true, value)
+                    }
+                }
+            }
+        }
+
         Button {
             Layout.fillWidth: true
             text: "KẾT NỐI"

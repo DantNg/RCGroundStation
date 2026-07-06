@@ -45,6 +45,11 @@ void LinkManager::start(std::unique_ptr<interfaces::ITelemetryLink> link)
     m_thread = std::thread([this] { run(); });
 }
 
+void LinkManager::setBridge(bool enabled, int port, bool allowUplink)
+{
+    m_bridge.configure(enabled, static_cast<uint16_t>(port), allowUplink);
+}
+
 void LinkManager::stop()
 {
     m_stop.store(true);
@@ -80,8 +85,19 @@ void LinkManager::run()
     bool announced = false;
     m_store->mutate([&](TelemetrySnapshot &s) { s.link.sourceName = link->sourceName(); });
 
+    auto bridgeNotice = [this](const QString &text, bool err) {
+        m_notice(StatusText(err ? Severity::Error : Severity::Notice, text, nowMs(), true));
+    };
+
     while (!m_stop.load()) {
         int64_t now = nowMs();
+
+        // Cầu nối: mở/đóng socket theo cờ và rút gói máy tính gửi về (uplink) →
+        // tiêm vào phương tiện. Chạy mỗi vòng nên độ trễ uplink ≤ kRecvTimeoutS.
+        m_bridge.service(
+            [sink](const QByteArray &raw) { if (sink) sink->sendRawFrame(raw); },
+            bridgeNotice);
+
         if (sink && now - lastHbSent >= kHeartbeatMs) {
             try { sink->sendHeartbeat(); } catch (...) {}
             lastHbSent = now;
@@ -110,6 +126,7 @@ void LinkManager::run()
             lastFrameMs = now;
             goodBytes += msg->len + MAVLINK_NUM_NON_PAYLOAD_BYTES
                 + ((msg->incompat_flags & MAVLINK_IFLAG_SIGNED) ? MAVLINK_SIGNATURE_BLOCK_LEN : 0);
+            m_bridge.forward(*msg); // chuyển tiếp ra mạng (nếu cầu nối đang bật)
             try {
                 m_decoder.handle(*msg);
             } catch (...) {
@@ -128,6 +145,7 @@ void LinkManager::run()
         writeStats(frames, goodBytes, errors, lastFrameMs, now);
     }
 
+    m_bridge.shutdown(); // đóng socket cầu nối trên chính luồng worker
     m_store->mutate([](TelemetrySnapshot &s) { s.link.linkUp = false; });
 }
 
