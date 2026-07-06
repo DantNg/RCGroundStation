@@ -35,19 +35,19 @@ Rectangle {
         anchors.topMargin: 1
         spacing: 0
 
-        Tile { label: "GND SPD"; value: telemetry.groundspeed.toFixed(1); unit: "m/s"
-               sub: "AIR " + telemetry.airspeed.toFixed(1) }
-        Tile { label: "ALT REL"; value: telemetry.altRel.toFixed(1); unit: "m"
-               sub: "ABS " + telemetry.altMsl.toFixed(0) + "m" }
-        Tile { label: "DIST HOME"; value: String(root.distHome); unit: "m"; sub: "RTL READY" }
-        Tile { label: "HEADING"; value: Math.round(telemetry.heading) + "°"; unit: ""
+        Tile { label: "TỐC ĐỘ ĐẤT"; value: telemetry.groundspeed.toFixed(1); unit: "m/s"
+               sub: "GIÓ " + telemetry.airspeed.toFixed(1) }
+        Tile { label: "CAO ĐỘ"; value: telemetry.altRel.toFixed(1); unit: "m"
+               sub: "TT " + telemetry.altMsl.toFixed(0) + "m" }
+        Tile { label: "K/C ĐIỂM VỀ"; value: String(root.distHome); unit: "m"; sub: "SẴN SÀNG RTL" }
+        Tile { label: "HƯỚNG"; value: Math.round(telemetry.heading) + "°"; unit: ""
                sub: root.cardinal(telemetry.heading) }
-        Tile { label: "GPS"; value: String(telemetry.satellites); unit: "sat"
+        Tile { label: "GPS"; value: String(telemetry.satellites); unit: "vt"
                sub: telemetry.fixLabel; valueColor: Theme.accent }
-        Tile { label: "RF LINK"; value: telemetry.linkPct + "%"; unit: ""
-               sub: telemetry.linkPct > 75 ? "STRONG" : (telemetry.linkPct > 45 ? "NOMINAL" : "WEAK")
+        Tile { label: "SÓNG RF"; value: telemetry.linkPct + "%"; unit: ""
+               sub: telemetry.linkPct > 75 ? "MẠNH" : (telemetry.linkPct > 45 ? "ỔN ĐỊNH" : "YẾU")
                valueColor: telemetry.linkPct > 45 ? Theme.text : Theme.warn }
-        Tile { label: "BATTERY"; last: true
+        Tile { label: "PIN"; last: true
                value: (telemetry.battPct < 0 ? "—" : telemetry.battPct + "%"); unit: ""
                sub: telemetry.battVolt.toFixed(1) + "V · " + telemetry.battCurrent.toFixed(1) + "A"
                valueColor: telemetry.battPct > 50 ? Theme.accent

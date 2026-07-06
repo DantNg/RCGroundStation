@@ -44,9 +44,9 @@ Item {
         anchors.centerIn: parent
         spacing: 6
         visible: !view.visible
-        Text { text: "◉ CAMERA FEED"; color: "#5c6560"; font.family: Theme.mono; font.pixelSize: 12; font.letterSpacing: 4
+        Text { text: "◉ TÍN HIỆU CAMERA"; color: "#5c6560"; font.family: Theme.mono; font.pixelSize: 12; font.letterSpacing: 4
                anchors.horizontalCenter: parent.horizontalCenter }
-        Text { text: "NO INPUT · H.265 · 30 FPS · GIMBAL −12°"; color: "#454d49"; font.family: Theme.mono; font.pixelSize: 9; font.letterSpacing: 1
+        Text { text: "KHÔNG CÓ TÍN HIỆU · H.265 · 30 FPS · GIMBAL −12°"; color: "#454d49"; font.family: Theme.mono; font.pixelSize: 9; font.letterSpacing: 1
                anchors.horizontalCenter: parent.horizontalCenter }
     }
 
@@ -89,12 +89,12 @@ Item {
     // ── badge SPD (trái) ────────────────────────────────────────────────────
     SideBadge {
         anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter
-        caption: "SPD"; value: telemetry.groundspeed.toFixed(1); valueColor: Theme.accent
+        caption: "TỐC ĐỘ"; value: telemetry.groundspeed.toFixed(1); valueColor: Theme.accent
     }
     // ── badge ALT (phải) ────────────────────────────────────────────────────
     SideBadge {
         anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
-        caption: "ALT"; value: telemetry.altRel.toFixed(0); valueColor: Theme.text
+        caption: "CAO ĐỘ"; value: telemetry.altRel.toFixed(0); valueColor: Theme.text
     }
 
     // ── hướng (dưới-giữa) ───────────────────────────────────────────────────

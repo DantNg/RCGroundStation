@@ -42,12 +42,12 @@ Item {
     // ── badge AIRSPD (trái) ─────────────────────────────────────────────────
     HudBadge {
         anchors.left: parent.left; anchors.leftMargin: 12; anchors.verticalCenter: parent.verticalCenter
-        caption: "AIRSPD"; value: telemetry.airspeed.toFixed(1); unit: "m/s"; valueColor: Theme.accent
+        caption: "TỐC ĐỘ GIÓ"; value: telemetry.airspeed.toFixed(1); unit: "m/s"; valueColor: Theme.accent
     }
     // ── badge ALT REL (phải) ────────────────────────────────────────────────
     HudBadge {
         anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter
-        caption: "ALT REL"; value: telemetry.altRel.toFixed(1); unit: "m"; valueColor: Theme.text
+        caption: "CAO ĐỘ"; value: telemetry.altRel.toFixed(1); unit: "m"; valueColor: Theme.text
     }
 
     // ── ô hướng (trên-giữa) ─────────────────────────────────────────────────
@@ -63,7 +63,7 @@ Item {
     // ── nhãn dưới ───────────────────────────────────────────────────────────
     Text {
         anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 8
-        text: "PRIMARY FLIGHT DISPLAY · SYNTHETIC"; color: "#8a938d"
+        text: "MÀN HÌNH BAY CHÍNH · MÔ PHỎNG"; color: "#8a938d"
         font.family: Theme.mono; font.pixelSize: 9; font.letterSpacing: 1
     }
 

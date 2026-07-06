@@ -10,7 +10,7 @@ Item {
     property string mainView: "MAP"
     signal requestView(string view)
 
-    readonly property var meta: ({ "MAP": "TAC MAP", "CAM": "FPV CAM", "HUD": "PFD HUD" })
+    readonly property var meta: ({ "MAP": "BẢN ĐỒ", "CAM": "CAMERA", "HUD": "HUD" })
 
     Rectangle { anchors.fill: parent; color: Theme.view }
 
@@ -59,7 +59,7 @@ Item {
                     }
                     Text {
                         anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter
-                        text: "TAP ▸"; color: Theme.danger; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 0.5
+                        text: "CHẠM ▸"; color: Theme.danger; font.family: Theme.mono; font.pixelSize: 7; font.letterSpacing: 0.5
                     }
                 }
 

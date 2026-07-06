@@ -63,6 +63,14 @@ int main(int argc, char *argv[])
             .toString();
     engine.rootContext()->setContextProperty(QStringLiteral("mapProvidersUrl"), providersUrl);
 
+    // Chẩn đoán bản đồ (in ra stderr) — hữu ích khi map trắng trên Linux/Pi.
+    // Tile Esri/OSM tải qua https nên cần backend TLS: nếu supportsSsl()=false thì
+    // mọi tile fail và map trắng — khi đó cài openssl + ca-certificates.
+    qInfo() << "[map] providers:" << providersUrl;
+    qInfo() << "[map] TLS backends:" << QSslSocket::availableBackends()
+            << "| active:" << QSslSocket::activeBackend()
+            << "| supportsSsl:" << QSslSocket::supportsSsl();
+
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app,
         []() { std::exit(EXIT_FAILURE); }, Qt::QueuedConnection);

@@ -97,6 +97,8 @@ Item {
             selectSatellite();
         }
         onSupportedMapTypesChanged: selectSatellite()
+        onErrorChanged: if (error !== Map.NoError)
+            console.warn("Bản đồ lỗi:", error, errorString);
 
         WheelHandler {
             onWheel: (ev) => map.zoomLevel = Math.max(map.minimumZoomLevel,
@@ -227,7 +229,7 @@ Item {
     Rectangle {
         x: 8; y: 8; radius: 3; color: "#8c060a09"
         width: tapTxt.implicitWidth + 10; height: tapTxt.implicitHeight + 4
-        Text { id: tapTxt; anchors.centerIn: parent; text: "◈ TAP MAP → SET GOTO"
+        Text { id: tapTxt; anchors.centerIn: parent; text: "◈ CHẠM BẢN ĐỒ → ĐẶT ĐIỂM ĐẾN"
                color: Theme.danger; font.family: Theme.mono; font.pixelSize: 8; font.letterSpacing: 0.6 }
     }
 
@@ -235,8 +237,8 @@ Item {
     Text {
         x: 8; anchors.bottom: parent.bottom; anchors.bottomMargin: 8
         text: telemetry.posValid
-              ? telemetry.lat.toFixed(4) + "° · " + telemetry.lon.toFixed(4) + "° · ZOOM " + Math.round(map.zoomLevel)
-              : "— NO FIX — ZOOM " + Math.round(map.zoomLevel)
+              ? telemetry.lat.toFixed(4) + "° · " + telemetry.lon.toFixed(4) + "° · PHÓNG " + Math.round(map.zoomLevel)
+              : "— CHƯA CÓ GPS — PHÓNG " + Math.round(map.zoomLevel)
         color: telemetry.posValid ? "#6f7a76" : Theme.dim
         font.family: Theme.mono; font.pixelSize: 9; font.letterSpacing: 0.5
         style: Text.Outline; styleColor: "#a0000000"
@@ -254,7 +256,7 @@ Item {
             id: goRow
             anchors.centerIn: parent; spacing: 8
             Text { anchors.verticalCenter: parent.verticalCenter
-                   text: "GOTO SET · FLY TO POINT?"; color: Theme.text
+                   text: "ĐÃ ĐẶT ĐIỂM · BAY TỚI?"; color: Theme.text
                    font.family: Theme.mono; font.pixelSize: 10; font.letterSpacing: 0.4 }
             Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
@@ -262,7 +264,7 @@ Item {
                 color: telemetry.connected ? "#d9ff3b3b" : "transparent"
                 border.color: Theme.danger
                 opacity: telemetry.connected ? 1 : 0.5
-                Text { id: flyTxt; anchors.centerIn: parent; text: "FLY HERE"
+                Text { id: flyTxt; anchors.centerIn: parent; text: "BAY TỚI ĐÂY"
                        color: telemetry.connected ? "#1a0505" : Theme.danger
                        font.family: Theme.mono; font.pixelSize: 10; font.bold: true; font.letterSpacing: 0.6 }
                 MouseArea {
@@ -280,10 +282,54 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 width: cxTxt.implicitWidth + 16; height: 22; radius: 5
                 color: "transparent"; border.color: "#3a3340"
-                Text { id: cxTxt; anchors.centerIn: parent; text: "CANCEL"
+                Text { id: cxTxt; anchors.centerIn: parent; text: "HUỶ"
                        color: "#b9b7c2"; font.family: Theme.mono; font.pixelSize: 10; font.letterSpacing: 0.6 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                             onClicked: root.gotoCoord = null }
+            }
+        }
+    }
+
+    // ── overlay chẩn đoán khi bản đồ KHÔNG tải được ─────────────────────────
+    // Trên Linux/Raspberry Pi map thường trắng vì thiếu plugin Qt Location (OSM)
+    // hoặc backend TLS. Thay vì để trắng khó hiểu, hiện rõ lý do + cách khắc phục.
+    // - map.error khác NoMap  → dịch vụ bản đồ / plugin lỗi.
+    // - hết thời gian mà supportedMapTypes rỗng → plugin OSM chưa được cài/nạp.
+    property bool loadTimedOut: false
+    Timer { interval: 6000; running: true; repeat: false; onTriggered: root.loadTimedOut = true }
+
+    Rectangle {
+        anchors.fill: parent
+        z: 60
+        color: "#ec050a09"
+        visible: map.error !== Map.NoError
+                 || (root.loadTimedOut && map.supportedMapTypes.length === 0)
+
+        Column {
+            anchors.centerIn: parent
+            width: parent.width - 48
+            spacing: 10
+
+            Text {
+                width: parent.width; horizontalAlignment: Text.AlignHCenter
+                text: "⚠ BẢN ĐỒ KHÔNG TẢI ĐƯỢC"
+                color: Theme.warn; font.family: Theme.mono; font.pixelSize: 15; font.bold: true; font.letterSpacing: 1
+            }
+            Text {
+                width: parent.width; horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                text: map.error !== Map.NoError
+                      ? ("Lỗi dịch vụ bản đồ: " + map.errorString)
+                      : "Thiếu plugin Qt Location (OSM) hoặc backend TLS."
+                color: Theme.text; font.family: Theme.mono; font.pixelSize: 11
+            }
+            Text {
+                width: parent.width; horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                text: "Trên Linux/Raspberry Pi cài các gói:\n"
+                      + "sudo apt install qml6-module-qtlocation qml6-module-qtpositioning \\\n"
+                      + "    libqt6positioning6-plugins openssl ca-certificates"
+                color: Theme.dim; font.family: Theme.mono; font.pixelSize: 10
             }
         }
     }

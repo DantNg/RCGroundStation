@@ -67,7 +67,7 @@ public:
     int linkPct() const { return m_linkPct; }
 
     bool armed() const { return m_armed; }
-    QString armLabel() const { return m_armed ? QStringLiteral("● ARMED") : QStringLiteral("○ DISARMED"); }
+    QString armLabel() const { return m_armed ? QStringLiteral("● ĐÃ ARM") : QStringLiteral("○ CHƯA ARM"); }
     QString modeLabel() const { return m_modeLabel; }
     QString armElapsed() const { return m_armElapsed; }
 

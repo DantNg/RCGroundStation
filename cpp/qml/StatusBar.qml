@@ -68,7 +68,7 @@ Rectangle {
             spacing: 6
             Layout.alignment: Qt.AlignVCenter
             Text { anchors.verticalCenter: parent.verticalCenter
-                   text: "MODE"; color: Theme.dim; font.family: Theme.ui; font.pixelSize: 9; font.letterSpacing: 1.5 }
+                   text: "CHẾ ĐỘ"; color: Theme.dim; font.family: Theme.ui; font.pixelSize: 9; font.letterSpacing: 1.5 }
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: telemetry.connected ? telemetry.modeLabel : "—"
