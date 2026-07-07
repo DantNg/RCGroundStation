@@ -8,6 +8,7 @@
 // Overlay chiến thuật giữ nguyên tinh thần mockup: la bàn, toạ độ, ký hiệu drone
 // xoay theo hướng, dấu HOME, và tap-để-GOTO → backend.flyTo() (lệnh GUIDED thật).
 import QtQuick
+import QtQuick.Shapes
 import QtLocation
 import QtPositioning
 import GroundCtrl
@@ -135,36 +136,31 @@ Item {
             sourceItem: Item {
                 width: 40; height: 40   // cố định, đủ rộng để chevron xoay không bị cắt
 
-                // chevron hướng — chỉ RIÊNG phần này xoay quanh tâm
-                Item {
+                // quầng mờ CỐ ĐỊNH (không xoay) — Rectangle tròn, nền thật trong suốt
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 26; height: 26; radius: 13
+                    color: "#1aff3b3b"
+                }
+
+                // chevron hướng — chỉ RIÊNG phần này xoay quanh tâm.
+                // Dùng Shape (vector) thay Canvas: trên Linux Canvas bị grab thành
+                // texture đục, che mất tile map ngay tại vị trí drone.
+                Shape {
                     anchors.fill: parent
                     rotation: telemetry.heading
                     transformOrigin: Item.Center
-                    Canvas {
-                        id: chevron
-                        anchors.fill: parent
-                        property color fill: telemetry.armed ? Theme.danger : Theme.accent
-                        onFillChanged: requestPaint()
-                        onPaint: {
-                            const ctx = getContext("2d");
-                            const cx = width / 2, cy = height / 2;
-                            ctx.clearRect(0, 0, width, height);
-                            // quầng mờ quanh tâm
-                            ctx.beginPath();
-                            ctx.arc(cx, cy, 13, 0, Math.PI * 2);
-                            ctx.fillStyle = "rgba(255,59,59,0.10)";
-                            ctx.fill();
-                            // mũi chevron cân đối quanh tâm (đỉnh hướng lên = 0°)
-                            ctx.beginPath();
-                            ctx.moveTo(cx, cy - 13);        // đỉnh
-                            ctx.lineTo(cx + 10, cy + 9);    // cánh phải
-                            ctx.lineTo(cx, cy + 3);         // khấc giữa
-                            ctx.lineTo(cx - 10, cy + 9);    // cánh trái
-                            ctx.closePath();
-                            ctx.fillStyle = fill; ctx.fill();
-                            ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.2; ctx.stroke();
-                        }
-                        Component.onCompleted: requestPaint()
+                    preferredRendererType: Shape.GeometryRenderer
+                    ShapePath {
+                        strokeColor: "#ffffff"
+                        strokeWidth: 1.2
+                        fillColor: telemetry.armed ? Theme.danger : Theme.accent
+                        // cân đối quanh tâm (20,20); đỉnh hướng lên = 0°
+                        startX: 20; startY: 7          // đỉnh
+                        PathLine { x: 30; y: 29 }      // cánh phải
+                        PathLine { x: 20; y: 23 }      // khấc giữa
+                        PathLine { x: 10; y: 29 }      // cánh trái
+                        PathLine { x: 20; y: 7 }       // khép lại đỉnh
                     }
                 }
 

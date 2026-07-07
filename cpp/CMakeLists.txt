@@ -19,7 +19,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 find_package(Qt6 REQUIRED COMPONENTS
-    Core Gui Qml Quick QuickControls2
+    Core Gui Qml Quick QuickControls2 QuickShapes
     Location Positioning Multimedia
     Network SerialPort)
 
@@ -89,7 +89,7 @@ qt_add_qml_module(LiteGCS
 )
 
 target_link_libraries(LiteGCS PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
+    Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::QuickShapes
     Qt6::Location Qt6::Positioning Qt6::Multimedia
     Qt6::Network Qt6::SerialPort)
 
