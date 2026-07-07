@@ -8,7 +8,6 @@
 // Overlay chiến thuật giữ nguyên tinh thần mockup: la bàn, toạ độ, ký hiệu drone
 // xoay theo hướng, dấu HOME, và tap-để-GOTO → backend.flyTo() (lệnh GUIDED thật).
 import QtQuick
-import QtQuick.Shapes
 import QtLocation
 import QtPositioning
 import GroundCtrl
@@ -123,57 +122,8 @@ Item {
             }
         }
 
-        // ── ký hiệu drone ─────────────────────────────────────────────────
-        // Điểm neo = TÂM (20,20) của một Item vuông CỐ ĐỊNH, KHÔNG xoay → điểm
-        // neo luôn trùng đúng toạ độ GPS thực. Chỉ phần chevron con mới xoay
-        // theo hướng (quanh tâm). Trước đây xoay cả Item gốc khiến hộp bao đổi
-        // kích thước và MapQuickItem đặt lệch marker khi hướng thay đổi.
-        MapQuickItem {
-            id: droneMarker
-            visible: telemetry.posValid
-            coordinate: QtPositioning.coordinate(telemetry.lat, telemetry.lon)
-            anchorPoint.x: 20; anchorPoint.y: 20
-            sourceItem: Item {
-                width: 40; height: 40   // cố định, đủ rộng để chevron xoay không bị cắt
-
-                // quầng mờ CỐ ĐỊNH (không xoay) — Rectangle tròn, nền thật trong suốt
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: 26; height: 26; radius: 13
-                    color: "#1aff3b3b"
-                }
-
-                // chevron hướng — chỉ RIÊNG phần này xoay quanh tâm.
-                // Dùng Shape (vector) thay Canvas: trên Linux Canvas bị grab thành
-                // texture đục, che mất tile map ngay tại vị trí drone.
-                Shape {
-                    anchors.fill: parent
-                    rotation: telemetry.heading
-                    transformOrigin: Item.Center
-                    preferredRendererType: Shape.GeometryRenderer
-                    ShapePath {
-                        strokeColor: "#ffffff"
-                        strokeWidth: 1.2
-                        fillColor: telemetry.armed ? Theme.danger : Theme.accent
-                        // cân đối quanh tâm (20,20); đỉnh hướng lên = 0°
-                        startX: 20; startY: 7          // đỉnh
-                        PathLine { x: 30; y: 29 }      // cánh phải
-                        PathLine { x: 20; y: 23 }      // khấc giữa
-                        PathLine { x: 10; y: 29 }      // cánh trái
-                        PathLine { x: 20; y: 7 }       // khép lại đỉnh
-                    }
-                }
-
-                // chấm tâm CỐ ĐỊNH — đánh dấu chính xác toạ độ GPS thực của drone
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: 6; height: 6; radius: 3
-                    color: "#ffffff"
-                    border.color: telemetry.armed ? Theme.danger : Theme.accent
-                    border.width: 1.5
-                }
-            }
-        }
+        // Ký hiệu drone KHÔNG vẽ ở đây bằng MapQuickItem nữa — xem overlay
+        // "droneOverlay" bên dưới (tránh lỗi ô chữ nhật đục trên Linux).
 
         // ── dấu GOTO ──────────────────────────────────────────────────────
         MapQuickItem {
@@ -240,6 +190,62 @@ Item {
                 const alt = telemetry.altRel > 1 ? telemetry.altRel : 30;
                 backend.shareWaypoint(root.gotoCoord.latitude, root.gotoCoord.longitude, alt);
             }
+        }
+    }
+
+    // ── ký hiệu drone (OVERLAY, KHÔNG dùng MapQuickItem) ─────────────────────
+    // Trên Linux/Pi, MapQuickItem "grab" sourceItem thành texture nền ĐỤC → che
+    // map thành ô chữ nhật ngay tại drone. Ở đây vẽ như overlay QML thường và
+    // chiếu toạ độ GPS ra pixel bằng map.fromCoordinate() → composite trong suốt
+    // bình thường. Chevron dựng bằng Rectangle thuần (không cần Canvas/Shapes).
+    Item {
+        id: droneOverlay
+        visible: telemetry.posValid
+        width: 40; height: 40
+        z: 40
+        // chiếu toạ độ drone ra pixel; tham chiếu center/zoom/kích thước để tái
+        // tính mỗi khi map pan/zoom (không chỉ khi vị trí drone đổi)
+        property point scr: {
+            void map.center; void map.zoomLevel; void map.width; void map.height;
+            return telemetry.posValid
+                ? map.fromCoordinate(QtPositioning.coordinate(telemetry.lat, telemetry.lon), false)
+                : Qt.point(-1000, -1000);
+        }
+        x: scr.x - width / 2
+        y: scr.y - height / 2
+
+        // quầng mờ cố định
+        Rectangle {
+            anchors.centerIn: parent
+            width: 26; height: 26; radius: 13
+            color: "#1aff3b3b"
+        }
+
+        // chevron hướng (^) — hai thanh Rectangle xoay quanh tâm theo heading
+        Item {
+            anchors.fill: parent
+            rotation: telemetry.heading
+            transformOrigin: Item.Center
+            property color fill: telemetry.armed ? Theme.danger : Theme.accent
+            Rectangle {   // cánh trái "/"
+                x: 13.5; y: 10; width: 5; height: 18; radius: 2.5
+                color: parent.fill; antialiasing: true
+                rotation: 26.6; transformOrigin: Item.Center
+            }
+            Rectangle {   // cánh phải "\"
+                x: 21.5; y: 10; width: 5; height: 18; radius: 2.5
+                color: parent.fill; antialiasing: true
+                rotation: -26.6; transformOrigin: Item.Center
+            }
+        }
+
+        // chấm tâm — đánh dấu chính xác toạ độ GPS thực của drone
+        Rectangle {
+            anchors.centerIn: parent
+            width: 6; height: 6; radius: 3
+            color: "#ffffff"
+            border.color: telemetry.armed ? Theme.danger : Theme.accent
+            border.width: 1.5
         }
     }
 
