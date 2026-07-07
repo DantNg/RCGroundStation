@@ -106,82 +106,8 @@ Item {
                         Math.min(map.maximumZoomLevel, map.zoomLevel + (ev.angleDelta.y > 0 ? 0.5 : -0.5)))
         }
 
-        // ── dấu HOME (kim cương lục) ──────────────────────────────────────
-        MapQuickItem {
-            visible: root.homeCoord !== null
-            coordinate: root.homeCoord || QtPositioning.coordinate()
-            anchorPoint.x: 8; anchorPoint.y: 8
-            sourceItem: Item {
-                width: 16; height: 26
-                Rectangle {
-                    width: 16; height: 16; rotation: 45
-                    color: "#2937e0a0"; border.color: Theme.accent; border.width: 1.5
-                }
-                Text { text: "HOME"; color: Theme.accent; font.family: Theme.mono; font.pixelSize: 8; font.letterSpacing: 1
-                       anchors.horizontalCenter: parent.horizontalCenter; y: 16 }
-            }
-        }
-
-        // Ký hiệu drone KHÔNG vẽ ở đây bằng MapQuickItem nữa — xem overlay
-        // "droneOverlay" bên dưới (tránh lỗi ô chữ nhật đục trên Linux).
-
-        // ── dấu GOTO ──────────────────────────────────────────────────────
-        MapQuickItem {
-            visible: root.hasGoto
-            coordinate: root.gotoCoord || QtPositioning.coordinate()
-            anchorPoint.x: 8; anchorPoint.y: 8
-            sourceItem: Item {
-                width: 16; height: 16
-                Rectangle { anchors.centerIn: parent; width: 16; height: 16; rotation: 45
-                            color: "transparent"; border.color: Theme.danger; border.width: 1.5 }
-            }
-        }
-
-        // ── waypoint chia sẻ qua cầu nối (marker NHẤP NHÁY, chỉ hiện ở trạm
-        //    giám sát nhận được — trạm đang chọn không tự nhận lại) ───────────
-        MapQuickItem {
-            id: sharedWp
-            visible: telemetry.sharedWpValid
-            coordinate: telemetry.sharedWpValid
-                        ? QtPositioning.coordinate(telemetry.sharedWpLat, telemetry.sharedWpLon)
-                        : QtPositioning.coordinate()
-            anchorPoint.x: 21; anchorPoint.y: 21
-            sourceItem: Item {
-                width: 42; height: 42
-                // vòng xung lan toả để gây chú ý
-                Rectangle {
-                    id: pulse
-                    anchors.centerIn: parent
-                    width: 16; height: 16; radius: 8
-                    color: "transparent"; border.color: Theme.warn; border.width: 2
-                    ParallelAnimation {
-                        running: sharedWp.visible; loops: Animation.Infinite
-                        NumberAnimation { target: pulse; property: "scale"; from: 0.5; to: 2.6
-                                          duration: 1000; easing.type: Easing.OutQuad }
-                        NumberAnimation { target: pulse; property: "opacity"; from: 0.9; to: 0.0
-                                          duration: 1000 }
-                    }
-                }
-                // chấm tâm chớp tắt
-                Rectangle {
-                    id: dot
-                    anchors.centerIn: parent
-                    width: 14; height: 14; radius: 7
-                    color: Theme.warn; border.color: "#ffffff"; border.width: 1
-                    SequentialAnimation on opacity {
-                        running: sharedWp.visible; loops: Animation.Infinite
-                        NumberAnimation { from: 1.0; to: 0.3; duration: 500 }
-                        NumberAnimation { from: 0.3; to: 1.0; duration: 500 }
-                    }
-                }
-                Text {
-                    text: "WP"; color: Theme.warn
-                    font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 1
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.top: parent.top
-                }
-            }
-        }
+        // HOME / GOTO / WP KHÔNG vẽ bằng MapQuickItem nữa — xem các overlay bên
+        // dưới (MapQuickItem bị ô chữ nhật đục trên Linux/Pi do FBO không xoá alpha).
 
         TapHandler {
             onTapped: (ep) => {
@@ -202,14 +128,14 @@ Item {
         id: droneOverlay
         visible: telemetry.posValid
         width: 40; height: 40
-        z: 40
+        z: 42
         // chiếu toạ độ drone ra pixel; tham chiếu center/zoom/kích thước để tái
         // tính mỗi khi map pan/zoom (không chỉ khi vị trí drone đổi)
         property point scr: {
             void map.center; void map.zoomLevel; void map.width; void map.height;
             return telemetry.posValid
                 ? map.fromCoordinate(QtPositioning.coordinate(telemetry.lat, telemetry.lon), false)
-                : Qt.point(-1000, -1000);
+                : Qt.point(-10000, -10000);
         }
         x: scr.x - width / 2
         y: scr.y - height / 2
@@ -246,6 +172,93 @@ Item {
             color: "#ffffff"
             border.color: telemetry.armed ? Theme.danger : Theme.accent
             border.width: 1.5
+        }
+    }
+
+    // ── HOME (overlay) ──────────────────────────────────────────────────────
+    Item {
+        id: homeOverlay
+        visible: root.homeCoord !== null
+        width: 16; height: 16; z: 41
+        property point scr: {
+            void map.center; void map.zoomLevel; void map.width; void map.height;
+            return root.homeCoord !== null
+                ? map.fromCoordinate(root.homeCoord, false) : Qt.point(-10000, -10000);
+        }
+        x: scr.x - width / 2
+        y: scr.y - height / 2
+        Rectangle {
+            anchors.centerIn: parent; width: 16; height: 16; rotation: 45
+            color: "#2937e0a0"; border.color: Theme.accent; border.width: 1.5
+        }
+        Text {
+            text: "HOME"; color: Theme.accent
+            font.family: Theme.mono; font.pixelSize: 8; font.letterSpacing: 1
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.bottom; anchors.topMargin: 2
+        }
+    }
+
+    // ── GOTO (overlay) ──────────────────────────────────────────────────────
+    Item {
+        id: gotoOverlay
+        visible: root.hasGoto
+        width: 16; height: 16; z: 41
+        property point scr: {
+            void map.center; void map.zoomLevel; void map.width; void map.height;
+            return root.hasGoto
+                ? map.fromCoordinate(root.gotoCoord, false) : Qt.point(-10000, -10000);
+        }
+        x: scr.x - width / 2
+        y: scr.y - height / 2
+        Rectangle {
+            anchors.centerIn: parent; width: 16; height: 16; rotation: 45
+            color: "transparent"; border.color: Theme.danger; border.width: 1.5
+        }
+    }
+
+    // ── WP chia sẻ qua cầu nối (overlay, nhấp nháy) ─────────────────────────
+    Item {
+        id: sharedWpOverlay
+        visible: telemetry.sharedWpValid
+        width: 42; height: 42; z: 41
+        property point scr: {
+            void map.center; void map.zoomLevel; void map.width; void map.height;
+            return telemetry.sharedWpValid
+                ? map.fromCoordinate(QtPositioning.coordinate(telemetry.sharedWpLat, telemetry.sharedWpLon), false)
+                : Qt.point(-10000, -10000);
+        }
+        x: scr.x - width / 2
+        y: scr.y - height / 2
+        Rectangle {
+            id: pulse
+            anchors.centerIn: parent
+            width: 16; height: 16; radius: 8
+            color: "transparent"; border.color: Theme.warn; border.width: 2
+            ParallelAnimation {
+                running: sharedWpOverlay.visible; loops: Animation.Infinite
+                NumberAnimation { target: pulse; property: "scale"; from: 0.5; to: 2.6
+                                  duration: 1000; easing.type: Easing.OutQuad }
+                NumberAnimation { target: pulse; property: "opacity"; from: 0.9; to: 0.0
+                                  duration: 1000 }
+            }
+        }
+        Rectangle {
+            id: dot
+            anchors.centerIn: parent
+            width: 14; height: 14; radius: 7
+            color: Theme.warn; border.color: "#ffffff"; border.width: 1
+            SequentialAnimation on opacity {
+                running: sharedWpOverlay.visible; loops: Animation.Infinite
+                NumberAnimation { from: 1.0; to: 0.3; duration: 500 }
+                NumberAnimation { from: 0.3; to: 1.0; duration: 500 }
+            }
+        }
+        Text {
+            text: "WP"; color: Theme.warn
+            font.family: Theme.mono; font.pixelSize: 8; font.bold: true; font.letterSpacing: 1
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.top
         }
     }
 
