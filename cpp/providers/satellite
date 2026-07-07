@@ -1,8 +1,8 @@
 {
     "Enabled" : true,
-    "UrlTemplate" : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/%z/%y/%x",
+    "UrlTemplate" : "https://mt1.google.com/vt/lyrs=s&x=%x&y=%y&z=%z",
     "ImageFormat" : "jpg",
     "MaximumZoomLevel" : 21,
-    "MapCopyRight" : "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
-    "DataCopyRight" : "Esri, Maxar, Earthstar Geographics"
+    "MapCopyRight" : "&copy; Google",
+    "DataCopyRight" : "&copy; Google, Maxar Technologies, Airbus"
 }

@@ -26,7 +26,8 @@ Item {
         name: "osm"
         PluginParameter { name: "osm.mapping.providersrepository.address"; value: mapProvidersUrl }
         PluginParameter { name: "osm.mapping.highdpi_tiles"; value: "false" }
-        PluginParameter { name: "osm.useragent"; value: "LiteGCS-QML/1.0 (ground station)" }
+        // Google trả 403 nếu User-Agent lạ → giả lập trình duyệt như Mission Planner.
+        PluginParameter { name: "osm.useragent"; value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36" }
     }
 
     // ghi HOME ở fix hợp lệ đầu tiên + bám phương tiện khi đang theo dõi
@@ -51,7 +52,7 @@ Item {
         // Trần zoom = MaximumZoomLevel trong providers/satellite (Esri có tile
         // tới ~z21-23 ở đô thị). Bắt đầu ở 18 cho vùng bay hẹp.
         zoomLevel: 18
-        maximumZoomLevel: 21
+        maximumZoomLevel: 22
 
         // kéo để di chuyển bản đồ (tự tắt bám phương tiện)
         DragHandler {
@@ -121,36 +122,59 @@ Item {
             }
         }
 
-        // ── ký hiệu drone (chevron xoay theo hướng) ───────────────────────
+        // ── ký hiệu drone ─────────────────────────────────────────────────
+        // Điểm neo = TÂM (20,20) của một Item vuông CỐ ĐỊNH, KHÔNG xoay → điểm
+        // neo luôn trùng đúng toạ độ GPS thực. Chỉ phần chevron con mới xoay
+        // theo hướng (quanh tâm). Trước đây xoay cả Item gốc khiến hộp bao đổi
+        // kích thước và MapQuickItem đặt lệch marker khi hướng thay đổi.
         MapQuickItem {
+            id: droneMarker
             visible: telemetry.posValid
             coordinate: QtPositioning.coordinate(telemetry.lat, telemetry.lon)
-            anchorPoint.x: 14; anchorPoint.y: 14
+            anchorPoint.x: 20; anchorPoint.y: 20
             sourceItem: Item {
-                width: 28; height: 28
-                rotation: telemetry.heading
-                Canvas {
-                    id: chevron
+                width: 40; height: 40   // cố định, đủ rộng để chevron xoay không bị cắt
+
+                // chevron hướng — chỉ RIÊNG phần này xoay quanh tâm
+                Item {
                     anchors.fill: parent
-                    property color fill: telemetry.armed ? Theme.danger : Theme.accent
-                    onFillChanged: requestPaint()
-                    onPaint: {
-                        const ctx = getContext("2d");
-                        ctx.clearRect(0, 0, width, height);
-                        ctx.beginPath();
-                        ctx.arc(width / 2, height / 2, 12, 0, Math.PI * 2);
-                        ctx.fillStyle = "rgba(255,59,59,0.10)";
-                        ctx.fill();
-                        ctx.beginPath();
-                        ctx.moveTo(width / 2, 2);
-                        ctx.lineTo(width - 5, height - 4);
-                        ctx.lineTo(width / 2, height * 0.72);
-                        ctx.lineTo(5, height - 4);
-                        ctx.closePath();
-                        ctx.fillStyle = fill; ctx.fill();
-                        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.2; ctx.stroke();
+                    rotation: telemetry.heading
+                    transformOrigin: Item.Center
+                    Canvas {
+                        id: chevron
+                        anchors.fill: parent
+                        property color fill: telemetry.armed ? Theme.danger : Theme.accent
+                        onFillChanged: requestPaint()
+                        onPaint: {
+                            const ctx = getContext("2d");
+                            const cx = width / 2, cy = height / 2;
+                            ctx.clearRect(0, 0, width, height);
+                            // quầng mờ quanh tâm
+                            ctx.beginPath();
+                            ctx.arc(cx, cy, 13, 0, Math.PI * 2);
+                            ctx.fillStyle = "rgba(255,59,59,0.10)";
+                            ctx.fill();
+                            // mũi chevron cân đối quanh tâm (đỉnh hướng lên = 0°)
+                            ctx.beginPath();
+                            ctx.moveTo(cx, cy - 13);        // đỉnh
+                            ctx.lineTo(cx + 10, cy + 9);    // cánh phải
+                            ctx.lineTo(cx, cy + 3);         // khấc giữa
+                            ctx.lineTo(cx - 10, cy + 9);    // cánh trái
+                            ctx.closePath();
+                            ctx.fillStyle = fill; ctx.fill();
+                            ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.2; ctx.stroke();
+                        }
+                        Component.onCompleted: requestPaint()
                     }
-                    Component.onCompleted: requestPaint()
+                }
+
+                // chấm tâm CỐ ĐỊNH — đánh dấu chính xác toạ độ GPS thực của drone
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 6; height: 6; radius: 3
+                    color: "#ffffff"
+                    border.color: telemetry.armed ? Theme.danger : Theme.accent
+                    border.width: 1.5
                 }
             }
         }
@@ -288,7 +312,8 @@ Item {
     Text {
         x: 8; anchors.bottom: parent.bottom; anchors.bottomMargin: 8
         text: telemetry.posValid
-              ? telemetry.lat.toFixed(4) + "° · " + telemetry.lon.toFixed(4) + "° · PHÓNG " + Math.round(map.zoomLevel)
+              ? "VĨ " + telemetry.lat.toFixed(6) + "°  KINH " + telemetry.lon.toFixed(6)
+                + "°  CAO " + telemetry.altRel.toFixed(1) + "m  · PHÓNG " + Math.round(map.zoomLevel)
               : "— CHƯA CÓ GPS — PHÓNG " + Math.round(map.zoomLevel)
         color: telemetry.posValid ? "#6f7a76" : Theme.dim
         font.family: Theme.mono; font.pixelSize: 9; font.letterSpacing: 0.5
