@@ -1,6 +1,3 @@
 /build/
 /build-*/
 *.user
-
-# Sinh khi cấu hình bản Android: bản sao định nghĩa tile vào assets của APK.
-/android/assets/

@@ -61,15 +61,9 @@ int main(int argc, char *argv[])
     // vệ tinh (Esri World Imagery) dùng thứ tự tile z/y/x — plugin custom.host chỉ
     // hỗ trợ z/x/y.png, nên ta trỏ providersrepository.address tới thư mục cục bộ
     // "providers/" (cạnh binary) chứa file "satellite" (Esri) và "street" (OSM).
-#ifdef Q_OS_ANDROID
-    // Trên Android không có "thư mục cạnh binary": định nghĩa tile được gói vào
-    // assets của APK (android/assets/providers) và đọc qua lược đồ assets:/.
-    const QString providersUrl = QStringLiteral("assets:/providers/");
-#else
     const QString providersUrl =
         QUrl::fromLocalFile(QCoreApplication::applicationDirPath() + QStringLiteral("/providers/"))
             .toString();
-#endif
     engine.rootContext()->setContextProperty(QStringLiteral("mapProvidersUrl"), providersUrl);
 
     // Chẩn đoán bản đồ (in ra stderr) — hữu ích khi map trắng trên Linux/Pi.

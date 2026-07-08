@@ -88,9 +88,7 @@ private:
     QIODevice *m_device = nullptr;         // trỏ tới một trong các socket dưới
     std::unique_ptr<QUdpSocket> m_udp;
     std::unique_ptr<QTcpSocket> m_tcp;
-#ifndef GCS_NO_SERIAL
-    std::unique_ptr<QSerialPort> m_serial; // không có trên Android (không QtSerialPort)
-#endif
+    std::unique_ptr<QSerialPort> m_serial;
 
     // đích UDP học được từ gói đầu tiên
     QHostAddress m_peerAddr;

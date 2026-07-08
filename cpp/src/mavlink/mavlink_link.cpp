@@ -3,11 +3,9 @@
 #include "domain/telemetry.h"
 
 #include <QNetworkDatagram>
+#include <QSerialPort>
 #include <QTcpSocket>
 #include <QUdpSocket>
-#ifndef GCS_NO_SERIAL
-#include <QSerialPort>
-#endif
 
 #include <stdexcept>
 
@@ -93,11 +91,6 @@ void MavlinkLink::open()
         }
         m_device = m_tcp.get();
     } else {
-#ifdef GCS_NO_SERIAL
-        // Android không có QtSerialPort — chỉ dùng UDP/TCP qua Wi-Fi.
-        throw std::runtime_error(
-            "Cổng nối tiếp không hỗ trợ trên nền này — dùng UDP hoặc TCP");
-#else
         m_serial = std::make_unique<QSerialPort>();
         m_serial->setPortName(m_connStr);
         m_serial->setBaudRate(m_baud);
@@ -107,16 +100,13 @@ void MavlinkLink::open()
             throw std::runtime_error(("Không thể mở serial: " + err).toStdString());
         }
         m_device = m_serial.get();
-#endif
     }
 }
 
 void MavlinkLink::close()
 {
     m_device = nullptr;
-#ifndef GCS_NO_SERIAL
     if (m_serial) { m_serial->close(); m_serial.reset(); }
-#endif
     if (m_tcp)    { m_tcp->close(); m_tcp.reset(); }
     if (m_udp)    { m_udp->close(); m_udp.reset(); }
     m_rxBuf.clear();
