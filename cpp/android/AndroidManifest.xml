@@ -1,0 +1,55 @@
+<?xml version="1.0"?>
+<!-- Manifest Android cho Trạm Điều Khiển Mặt Đất (bản Qt Quick).
+     androiddeployqt điền các trường %%...%% từ CMake (tên gói, phiên bản, SDK…).
+     Quyền: INTERNET (tải tile bản đồ vệ tinh Esri + UDP/TCP telemetry),
+     ACCESS_NETWORK_STATE (Qt Network), và vị trí (Qt Positioning cho la bàn/GPS
+     thiết bị — tuỳ chọn). Không xin quyền serial vì Android không dùng cổng này. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.gcs.groundstation"
+    android:installLocation="auto"
+    android:versionCode="-- %%INSERT_VERSION_CODE%% --"
+    android:versionName="-- %%INSERT_VERSION_NAME%% --">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <supports-screens
+        android:largeScreens="true"
+        android:normalScreens="true"
+        android:anyDensity="true"
+        android:smallScreens="true" />
+
+    <application
+        android:name="org.qtproject.qt.android.bindings.QtApplication"
+        android:label="Trạm Điều Khiển Mặt Đất"
+        android:hardwareAccelerated="true"
+        android:requestLegacyExternalStorage="true"
+        android:allowBackup="true"
+        android:extractNativeLibs="true">
+
+        <activity
+            android:name="org.qtproject.qt.android.bindings.QtActivity"
+            android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc|density"
+            android:label="Trạm Điều Khiển Mặt Đất"
+            android:launchMode="singleTop"
+            android:screenOrientation="landscape"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Qt điền các meta-data (thư viện, style…) khi đóng gói. -->
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="-- %%INSERT_APP_LIB_NAME%% --" />
+            <meta-data
+                android:name="android.app.arguments"
+                android:value="-- %%INSERT_APP_ARGUMENTS%% --" />
+        </activity>
+    </application>
+</manifest>

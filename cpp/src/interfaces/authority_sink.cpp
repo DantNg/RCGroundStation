@@ -45,6 +45,16 @@ void AuthorityGuardedSink::setPositionTargetGlobal(double lat, double lon, doubl
         s->setPositionTargetGlobal(lat, lon, altRel);
 }
 
+void AuthorityGuardedSink::manualControl(int x, int y, int z, int r, int buttons)
+{
+    // Cần lái ảo là "điều khiển trực tiếp" — chỉ cấp được điều khiển mới gửi.
+    // Chặn im lặng (không báo) vì luồng ~25 Hz sẽ nhiễu nếu báo mỗi khung.
+    if (!m_auth.canControl)
+        return;
+    if (ICommandSink *s = m_inner ? m_inner() : nullptr)
+        s->manualControl(x, y, z, r, buttons);
+}
+
 void AuthorityGuardedSink::sendHeartbeat()
 {
     // Heartbeat GCS là "tuyên bố quyền điều khiển" — chỉ cấp được điều khiển mới

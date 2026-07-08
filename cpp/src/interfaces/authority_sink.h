@@ -30,6 +30,7 @@ public:
                      int confirmation = 0) override;
     void setMode(int baseMode, int customMode) override;
     void setPositionTargetGlobal(double lat, double lon, double altRel) override;
+    void manualControl(int x, int y, int z, int r, int buttons) override;
     void sendHeartbeat() override;
     void missionCount(int count, int missionType = 0) override;
     void missionItemInt(const MissionItem &item) override;

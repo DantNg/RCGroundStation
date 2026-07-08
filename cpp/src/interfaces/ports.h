@@ -73,6 +73,12 @@ public:
     // Ra lệnh mục tiêu vị trí GUIDED ("Bay đến đây"). lat/lon độ, altRel m.
     virtual void setPositionTargetGlobal(double lat, double lon, double altRel) = 0;
 
+    // Gửi MANUAL_CONTROL (cần lái ảo / joystick). Các trục đã ở thang MAVLink:
+    // ``x`` = pitch (tiến/lùi) và ``y`` = roll (trái/phải) trong [-1000, 1000];
+    // ``z`` = ga trong [0, 1000] (500 = giữa); ``r`` = yaw trong [-1000, 1000];
+    // ``buttons`` là bitmask nút. Tần suất cao (~25 Hz) — không đảm bảo giao.
+    virtual void manualControl(int x, int y, int z, int r, int buttons) = 0;
+
     // Thông báo trạm mặt đất này cho phương tiện (giữ bộ đếm GCS-failsafe).
     virtual void sendHeartbeat() = 0;
 

@@ -87,6 +87,58 @@ Rectangle {
             glyph: "▼"; label: "HẠ CÁNH"; sub: "hạ cánh & tắt động cơ"; tint: Theme.warn
             onActivated: backend.setMode("LAND")
         }
+
+        // ── công tắc cần lái ảo (joystick) ──────────────────────────────────
+        // Bật/tắt điều khiển bằng cần lái ảo. Khi bật, hai cần hiện trên vùng xem
+        // và trạm bơm MANUAL_CONTROL ~25 Hz tới phương tiện. Sáng lục khi đang bật.
+        Rectangle {
+            id: joyToggle
+            readonly property bool on: joystick.enabled
+            Layout.fillWidth: true
+            Layout.preferredHeight: 40
+            radius: 6
+            color: on ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.20)
+                      : Theme.panel
+            border.color: on ? Theme.accent : Theme.strokeBtn
+            opacity: telemetry.connected ? 1 : 0.4
+
+            Row {
+                anchors.left: parent.left; anchors.leftMargin: 9
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 7
+                Text {
+                    text: "⌖"; color: joyToggle.on ? Theme.accent : Theme.sub
+                    font.pixelSize: 16; font.bold: true
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Column {
+                    anchors.verticalCenter: parent.verticalCenter
+                    Text {
+                        text: "CẦN LÁI"; color: joyToggle.on ? Theme.accent : Theme.sub
+                        font.family: Theme.mono; font.pixelSize: 13; font.bold: true; font.letterSpacing: 0.5
+                    }
+                    Text {
+                        text: joyToggle.on ? "đang bật · chạm để tắt" : "chạm để bật cần lái ảo"
+                        color: Theme.dim; font.family: Theme.ui; font.pixelSize: 8
+                    }
+                }
+            }
+
+            // đèn báo trạng thái (phải)
+            Rectangle {
+                anchors.right: parent.right; anchors.rightMargin: 9
+                anchors.verticalCenter: parent.verticalCenter
+                width: 9; height: 9; radius: 4.5
+                color: joyToggle.on ? Theme.accent : Theme.strokeBtn
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                enabled: telemetry.connected
+                cursorShape: Qt.PointingHandCursor
+                onClicked: joystick.enabled = !joystick.enabled
+            }
+        }
     }
 
     // ── hộp thoại nhập độ cao cất cánh ──────────────────────────────────────

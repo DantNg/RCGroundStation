@@ -95,3 +95,67 @@ python -c "from pymavlink.generator import mavgen; \
 
 Chạy bộ mô phỏng của bản Python ở một cửa sổ (`python ../tools/sim_udp.py`) rồi
 kết nối bằng **UDP cổng 14550** trong ứng dụng.
+
+## Cần lái ảo (joystick) — bật/tắt
+
+Điều khiển trực tiếp phương tiện bằng hai cần lái ảo trên màn cảm ứng, **bật/tắt
+tuỳ ý**:
+
+- Nút **CẦN LÁI** trong thanh CHẾ ĐỘ BAY (bên phải) bật/tắt tính năng. Khi bật,
+  đèn báo sáng lục và hai cần lái hiện lên vùng xem chính.
+- **Cần trái** — dọc = ga, ngang = yaw (xoay mũi). **Cần phải** — dọc = pitch
+  (tiến/lùi), ngang = roll (nghiêng). Nhả tay → cần tự về giữa.
+- Trạm bơm gói `MANUAL_CONTROL` tới phương tiện ở **~25 Hz** khi bật; tắt thì
+  dừng luồng và đưa cần về giữa.
+
+Kiến trúc: QML `JoystickOverlay`/`JoystickPad` → cầu nối `JoystickController`
+(`src/bridge`) → `ICommandSink::manualControl()` → `MavlinkLink` đóng gói
+`MANUAL_CONTROL`. Mọi khung đi qua **cổng gác quyền** (`AuthorityGuardedSink`),
+nên bản dựng chỉ-xem không thể điều khiển dù nút có lộ ra.
+
+> ⚠️ Cần lái ảo chỉ có tác dụng khi phương tiện đã **ARM** và ở **chế độ điều
+> khiển tay** (STABILIZE / ALT_HOLD / LOITER…). Ga giữa (cần ở giữa) ≈ giữ độ cao
+> ở ALT_HOLD. Vì `MANUAL_CONTROL` là luồng liên tục, tắt cần lái = ngừng gửi;
+> hãy chuyển sang chế độ tự giữ (LOITER/RTL) trước khi tắt nếu đang bay.
+
+## Build cho Android (APK)
+
+Bản Android dùng **UDP/TCP qua Wi-Fi** (Android không có QtSerialPort — mã serial
+bị biên dịch tắt bằng `GCS_NO_SERIAL`). Bản đồ vệ tinh cần Internet; định nghĩa
+tile được gói vào `assets/` của APK.
+
+**Cài một lần:**
+
+1. Kit **Qt cho Android**: chạy `C:\Qt\MaintenanceTool.exe` → *Add or remove
+   components* → Qt 6.10.3 → tích **Android** → sinh `C:\Qt\6.10.3\android_arm64_v8a`.
+2. **Android SDK** (Platform API 34) + **NDK** + build-tools + platform-tools —
+   cài dễ nhất qua Qt Creator (*Tools → Devices → Android*) hoặc Android Studio.
+3. **OpenJDK 17** (Temurin/Microsoft) và biến `JAVA_HOME` trỏ tới nó.
+
+**Dựng APK** (cmd.exe) — đặt biến môi trường rồi chạy script:
+
+```bat
+set QT_ANDROID=C:\Qt\6.10.3\android_arm64_v8a
+set QT_HOST_PATH=C:\Qt\6.10.3\mingw_64
+set ANDROID_SDK_ROOT=%LOCALAPPDATA%\Android\Sdk
+set ANDROID_NDK_ROOT=%LOCALAPPDATA%\Android\Sdk\ndk\<phiên-bản>
+set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-17...
+
+build-android.bat            :: cấu hình + build APK (Release)
+build-android.bat --clean    :: dựng lại từ đầu
+build-android.bat --install  :: build xong cài vào thiết bị qua adb
+```
+
+Hoặc trực tiếp qua CMake preset (đã khai báo trong `CMakePresets.json`):
+
+```bash
+cmake --preset android-arm64
+cmake --build build-android --target apk
+```
+
+APK nằm trong `build-android/android-build/build/outputs/apk/`. Cấu hình gói
+(quyền, hướng ngang, min/target SDK) ở `cpp/android/AndroidManifest.xml`.
+
+> Máy phát triển hiện **chưa cài** kit Qt cho Android nên chưa dựng được APK ngay;
+> toàn bộ scaffolding (preset, script, manifest, guard serial) đã sẵn sàng — chỉ
+> cần cài ba thứ ở trên là build được.

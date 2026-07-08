@@ -2,8 +2,10 @@
 
 #include "domain/flight_modes.h"
 
-#include <QSerialPortInfo>
 #include <QVariantMap>
+#ifndef GCS_NO_SERIAL
+#include <QSerialPortInfo>
+#endif
 
 namespace gcs::bridge {
 
@@ -34,8 +36,11 @@ QVariantList Backend::quickModes() const
 QStringList Backend::serialPorts() const
 {
     QStringList out;
+#ifndef GCS_NO_SERIAL
     for (const QSerialPortInfo &p : QSerialPortInfo::availablePorts())
         out << p.portName();
+#endif
+    // Android: trả danh sách rỗng — QML ẩn tab Serial khi không có cổng.
     return out;
 }
 

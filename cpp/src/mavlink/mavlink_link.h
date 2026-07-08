@@ -52,6 +52,7 @@ public:
                      float p5, float p6, float p7, int confirmation) override;
     void setMode(int baseMode, int customMode) override;
     void setPositionTargetGlobal(double lat, double lon, double altRel) override;
+    void manualControl(int x, int y, int z, int r, int buttons) override;
     void sendHeartbeat() override;
     void missionCount(int count, int missionType) override;
     void missionItemInt(const interfaces::MissionItem &item) override;
@@ -87,7 +88,9 @@ private:
     QIODevice *m_device = nullptr;         // trỏ tới một trong các socket dưới
     std::unique_ptr<QUdpSocket> m_udp;
     std::unique_ptr<QTcpSocket> m_tcp;
-    std::unique_ptr<QSerialPort> m_serial;
+#ifndef GCS_NO_SERIAL
+    std::unique_ptr<QSerialPort> m_serial; // không có trên Android (không QtSerialPort)
+#endif
 
     // đích UDP học được từ gói đầu tiên
     QHostAddress m_peerAddr;

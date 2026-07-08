@@ -88,6 +88,17 @@ ApplicationWindow {
                 }
             }
 
+            // ── lớp phủ cần lái ảo (trên vùng xem chính, dưới rail 134) ────
+            // Phủ đúng vùng xem: dưới thanh trạng thái (38), trên dải telemetry
+            // (80), trừ thanh chế độ bên phải (134). Tự ẩn khi joystick tắt.
+            JoystickOverlay {
+                anchors.fill: parent
+                anchors.topMargin: 38
+                anchors.bottomMargin: 80
+                anchors.rightMargin: 134
+                z: 40
+            }
+
             // ── banner cảnh báo (trên-giữa, trên vùng xem) ─────────────────
             WarningBanners {
                 width: Math.min(560, device.width - 200)

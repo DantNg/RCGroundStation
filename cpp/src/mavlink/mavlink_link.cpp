@@ -3,9 +3,11 @@
 #include "domain/telemetry.h"
 
 #include <QNetworkDatagram>
-#include <QSerialPort>
 #include <QTcpSocket>
 #include <QUdpSocket>
+#ifndef GCS_NO_SERIAL
+#include <QSerialPort>
+#endif
 
 #include <stdexcept>
 
@@ -91,6 +93,11 @@ void MavlinkLink::open()
         }
         m_device = m_tcp.get();
     } else {
+#ifdef GCS_NO_SERIAL
+        // Android không có QtSerialPort — chỉ dùng UDP/TCP qua Wi-Fi.
+        throw std::runtime_error(
+            "Cổng nối tiếp không hỗ trợ trên nền này — dùng UDP hoặc TCP");
+#else
         m_serial = std::make_unique<QSerialPort>();
         m_serial->setPortName(m_connStr);
         m_serial->setBaudRate(m_baud);
@@ -100,13 +107,16 @@ void MavlinkLink::open()
             throw std::runtime_error(("Không thể mở serial: " + err).toStdString());
         }
         m_device = m_serial.get();
+#endif
     }
 }
 
 void MavlinkLink::close()
 {
     m_device = nullptr;
+#ifndef GCS_NO_SERIAL
     if (m_serial) { m_serial->close(); m_serial.reset(); }
+#endif
     if (m_tcp)    { m_tcp->close(); m_tcp.reset(); }
     if (m_udp)    { m_udp->close(); m_udp.reset(); }
     m_rxBuf.clear();
@@ -305,6 +315,23 @@ void MavlinkLink::setPositionTargetGlobal(double lat, double lon, double altRel)
         static_cast<int32_t>(lat * 1e7), static_cast<int32_t>(lon * 1e7),
         static_cast<float>(altRel),
         0, 0, 0, 0, 0, 0, 0, 0);
+    enqueue(msg);
+}
+
+void MavlinkLink::manualControl(int x, int y, int z, int r, int buttons)
+{
+    // Tần suất cao: KHÔNG dùng requireTarget() (ném khi chưa có heartbeat) — chỉ
+    // bỏ khung im lặng nếu chưa biết mục tiêu, tránh spam ngoại lệ ở ~25 Hz.
+    const int sys = m_targetSystem.load();
+    if (!m_device || sys == 0)
+        return;
+    MavMessage msg;
+    mavlink_msg_manual_control_pack(kGcsSystem, kGcsComponent, &msg,
+        static_cast<uint8_t>(sys),
+        static_cast<int16_t>(x), static_cast<int16_t>(y),
+        static_cast<int16_t>(z), static_cast<int16_t>(r),
+        static_cast<uint16_t>(buttons),
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     enqueue(msg);
 }
 

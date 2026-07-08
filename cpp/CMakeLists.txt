@@ -18,10 +18,17 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS
+# QtSerialPort KHÔNG có trong bộ Qt cho Android — cổng nối tiếp phần cứng không
+# khả dụng trên Android (chỉ UDP/TCP qua Wi-Fi). Bỏ SerialPort khỏi bản Android và
+# biên dịch tắt mã serial bằng GCS_NO_SERIAL (xem mavlink_link.cpp / backend.cpp).
+set(GCS_QT_COMPONENTS
     Core Gui Qml Quick QuickControls2
-    Location Positioning Multimedia
-    Network SerialPort)
+    Location Positioning Multimedia Network)
+if(NOT ANDROID)
+    list(APPEND GCS_QT_COMPONENTS SerialPort)
+endif()
+
+find_package(Qt6 REQUIRED COMPONENTS ${GCS_QT_COMPONENTS})
 
 qt_standard_project_setup(REQUIRES 6.5)
 
@@ -48,12 +55,24 @@ set(SOURCES
 
     src/bridge/telemetry_view_model.cpp
     src/bridge/backend.cpp
+    src/bridge/joystick_controller.cpp
 )
 
-qt_add_executable(LiteGCS WIN32 ${SOURCES})
+# Trên Android, mục tiêu phải là thư viện chia sẻ (androiddeployqt gói thành APK);
+# WIN32 chỉ áp cho Windows (ẩn cửa sổ console). qt_add_executable xử lý cả hai.
+if(ANDROID)
+    qt_add_executable(LiteGCS ${SOURCES})
+else()
+    qt_add_executable(LiteGCS WIN32 ${SOURCES})
+endif()
 
 target_include_directories(LiteGCS PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# Tắt mã cổng nối tiếp trên Android (không có QtSerialPort).
+if(ANDROID)
+    target_compile_definitions(LiteGCS PRIVATE GCS_NO_SERIAL)
+endif()
 
 # MAVLink C library (header-only, generated). Treat as SYSTEM so its generator
 # warnings don't drown out ours.
@@ -82,6 +101,8 @@ qt_add_qml_module(LiteGCS
         qml/TelemetryStrip.qml
         qml/ConnectionCard.qml
         qml/WarningBanners.qml
+        qml/JoystickPad.qml
+        qml/JoystickOverlay.qml
     RESOURCES
         qml/fonts/JetBrainsMono-Regular.ttf
         qml/fonts/ChakraPetch-Medium.ttf
@@ -90,14 +111,36 @@ qt_add_qml_module(LiteGCS
 
 target_link_libraries(LiteGCS PRIVATE
     Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
-    Qt6::Location Qt6::Positioning Qt6::Multimedia
-    Qt6::Network Qt6::SerialPort)
+    Qt6::Location Qt6::Positioning Qt6::Multimedia Qt6::Network)
+if(NOT ANDROID)
+    target_link_libraries(LiteGCS PRIVATE Qt6::SerialPort)
+endif()
 
 # ── định nghĩa nhà cung cấp tile bản đồ (Esri vệ tinh + OSM) ──────────────────
-# main.cpp trỏ osm.mapping.providersrepository.address tới thư mục này (cạnh
-# binary); plugin OSM đọc file "satellite"/"street" từ đây.
-add_custom_command(TARGET LiteGCS POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_CURRENT_SOURCE_DIR}/providers
-        $<TARGET_FILE_DIR:LiteGCS>/providers
-    COMMENT "Sao chép định nghĩa nhà cung cấp tile (Esri vệ tinh / OSM)")
+# main.cpp trỏ osm.mapping.providersrepository.address tới thư mục này. Trên
+# desktop: copy cạnh binary (POST_BUILD). Trên Android: gói vào assets của APK
+# (xem android/ + QT_ANDROID_PACKAGE_SOURCE_DIR) và main.cpp đọc "assets:/providers/".
+if(NOT ANDROID)
+    add_custom_command(TARGET LiteGCS POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/providers
+            $<TARGET_FILE_DIR:LiteGCS>/providers
+        COMMENT "Sao chép định nghĩa nhà cung cấp tile (Esri vệ tinh / OSM)")
+endif()
+
+# ── đóng gói Android (APK qua androiddeployqt) ────────────────────────────────
+# Thư mục android/ chứa AndroidManifest.xml (quyền INTERNET cho tile bản đồ + UDP/
+# TCP), và assets/providers là bản sao định nghĩa tile để chạy offline-repo. Kit
+# Qt cho Android + Android SDK/NDK phải được cài (xem cpp/README.md, mục Android).
+if(ANDROID)
+    # Đồng bộ providers vào assets của gói Android trước khi cấu hình APK.
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/providers
+         DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/android/assets)
+
+    set_target_properties(LiteGCS PROPERTIES
+        QT_ANDROID_PACKAGE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/android
+        QT_ANDROID_TARGET_SDK_VERSION 34
+        QT_ANDROID_MIN_SDK_VERSION 28
+        QT_ANDROID_VERSION_NAME "1.0"
+        QT_ANDROID_VERSION_CODE 1)
+endif()

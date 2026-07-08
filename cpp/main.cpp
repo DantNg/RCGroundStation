@@ -9,6 +9,7 @@
 // Kết nối. Thử không cần phần cứng: chạy bộ mô phỏng rồi kết nối UDP cổng 14550.
 #include "app/controller.h"
 #include "bridge/backend.h"
+#include "bridge/joystick_controller.h"
 #include "bridge/telemetry_view_model.h"
 #include "config.h"
 #include "domain/roles.h"
@@ -49,18 +50,26 @@ int main(int argc, char *argv[])
 
     gcs::bridge::TelemetryViewModel telemetry(&controller);
     gcs::bridge::Backend backend(&controller, config);
+    gcs::bridge::JoystickController joystick(&controller);
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("telemetry"), &telemetry);
     engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+    engine.rootContext()->setContextProperty(QStringLiteral("joystick"), &joystick);
 
     // Kho định nghĩa nhà cung cấp tile cho plugin OSM của Qt Location. Bản đồ 2D
     // vệ tinh (Esri World Imagery) dùng thứ tự tile z/y/x — plugin custom.host chỉ
     // hỗ trợ z/x/y.png, nên ta trỏ providersrepository.address tới thư mục cục bộ
     // "providers/" (cạnh binary) chứa file "satellite" (Esri) và "street" (OSM).
+#ifdef Q_OS_ANDROID
+    // Trên Android không có "thư mục cạnh binary": định nghĩa tile được gói vào
+    // assets của APK (android/assets/providers) và đọc qua lược đồ assets:/.
+    const QString providersUrl = QStringLiteral("assets:/providers/");
+#else
     const QString providersUrl =
         QUrl::fromLocalFile(QCoreApplication::applicationDirPath() + QStringLiteral("/providers/"))
             .toString();
+#endif
     engine.rootContext()->setContextProperty(QStringLiteral("mapProvidersUrl"), providersUrl);
 
     // Chẩn đoán bản đồ (in ra stderr) — hữu ích khi map trắng trên Linux/Pi.
