@@ -358,7 +358,44 @@ Rectangle {
                                font.family: Theme.mono; font.pixelSize: 13
                                horizontalAlignment: Text.AlignRight
                                Layout.preferredWidth: 44 }
+
+                        // đảo chiều nguồn điều khiển kênh này (REVERSE theo nguồn,
+                        // ghi RAM STM32 ngay khi chạm — LƯU FLASH để giữ)
+                        Rectangle {
+                            readonly property int src: rc.controlNames.indexOf(rc.channelSources[index])
+                            readonly property int rev: src >= 0 ? rc.reversed[src] : -1
+                            readonly property bool usable: rc.connected && src >= 0 && rev >= 0 && !rc.busy
+                            Layout.preferredWidth: 78
+                            Layout.preferredHeight: 32
+                            radius: 6
+                            color: rev === 1 ? "#26ffb020" : Theme.panel
+                            border.color: rev === 1 ? Theme.warn : Theme.strokeBtn
+                            opacity: usable ? 1 : 0.4
+                            Text { anchors.centerIn: parent
+                                   text: parent.rev === 1 ? "⇅ ĐẢO" : (parent.rev === 0 ? "THƯỜNG" : "?")
+                                   color: parent.rev === 1 ? Theme.warn : Theme.sub
+                                   font.family: Theme.mono; font.pixelSize: 11; font.bold: true }
+                            MouseArea { anchors.fill: parent; enabled: parent.usable
+                                        onClicked: rc.setReverse(parent.src, parent.rev !== 1) }
+                        }
                     }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Text {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: rc.calMessage !== "" ? rc.calMessage
+                              : "Chạm THƯỜNG / ĐẢO để đảo chiều nguồn của kênh (hiệu lực ngay). "
+                                + "Đảo SA..SD: kiểm tra lại gán mode ở tab CÔNG TẮC."
+                        color: rc.calMessageError ? Theme.dangerSoft : Theme.sub
+                        font.family: Theme.ui; font.pixelSize: 11
+                    }
+                    ActBtn { label: "LƯU FLASH"; tint: Theme.danger
+                             enabled: rc.connected && rc.calStep === 0 && !rc.busy
+                             onActivated: rc.saveConfig() }
                 }
             }
         }

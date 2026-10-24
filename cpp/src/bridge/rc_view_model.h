@@ -48,6 +48,9 @@ class RcViewModel : public QObject {
     Q_PROPERTY(QVariantList rawAdc READ rawAdc NOTIFY stateChanged)       // 6 × raw (LH,LV,RH,RV,SB,SC)
     Q_PROPERTY(QVariantList switchPos READ switchPos NOTIFY switchesChanged) // 4 × 0/1/2
     Q_PROPERTY(QStringList channelSources READ channelSources NOTIFY channelSourcesChanged) // CH1..8 → "RV"…
+    // đảo chiều theo nguồn (LH..SD): 8 × 0/1, -1 = chưa đọc được
+    Q_PROPERTY(QVariantList reversed READ reversed NOTIFY reverseChanged)
+    Q_PROPERTY(QStringList controlNames READ controlNames CONSTANT) // "LH".."SD" = chỉ số nguồn
 
     // ── gán chế độ bay ──────────────────────────────────────────────────────
     Q_PROPERTY(bool modeSwitchEnabled READ modeSwitchEnabled WRITE setModeSwitchEnabled NOTIFY switchModesChanged)
@@ -89,6 +92,14 @@ public:
     QVariantList rawAdc() const { return m_rawAdc; }
     QVariantList switchPos() const;
     QStringList channelSources() const { return m_channelSources; }
+    QVariantList reversed() const;
+    QStringList controlNames() const
+    {
+        QStringList out;
+        for (const char *n : rc::kControls)
+            out << QLatin1String(n);
+        return out;
+    }
 
     bool modeSwitchEnabled() const { return m_modeSwitchEnabled; }
     void setModeSwitchEnabled(bool on);
@@ -116,6 +127,7 @@ public:
     Q_INVOKABLE void cancelCalibration();
     Q_INVOKABLE void toggleCalChannel(int ch); // bật/tắt ghi kênh này (tắt chế độ tự chọn của kênh)
     Q_INVOKABLE void applyCalibration(); // CONFIG_WRITE CAL × 6 (RAM)
+    Q_INVOKABLE void setReverse(int src, bool on); // CONFIG_WRITE REVERSE (RAM, hiệu lực ngay)
     Q_INVOKABLE void saveConfig();       // CONFIG_SAVE (flash)
     Q_INVOKABLE void refreshConfig();    // đọc lại MAP + CAL
 
@@ -125,6 +137,7 @@ signals:
     void stateChanged();
     void switchesChanged();
     void channelSourcesChanged();
+    void reverseChanged();
     void switchModesChanged();
     void lastActionChanged();
     void gimbalSwapChanged();
@@ -138,6 +151,7 @@ private:
     void setMessage(const QString &msg, bool error);
     bool calChannelValid(int ch) const;
     QStringList selectedCalNames() const;
+    QString calDetail(int ch) const;
     void loadSwitchModes();
     void saveSwitchModes() const;
 
@@ -157,6 +171,13 @@ private:
     QVariantList m_controls, m_channels, m_rawAdc;
     std::array<int, 4> m_switchPos{{-1, -1, -1, -1}};
     QStringList m_channelSources;
+    std::array<int, 8> m_reverse{{-1, -1, -1, -1, -1, -1, -1, -1}};
+
+    // vài frame raw ADC gần nhất — lấy trung bình khi chụp tâm
+    static constexpr int kHistLen = 8;
+    std::array<std::array<int, kHistLen>, 6> m_adcHist{};
+    int m_histPos = 0;
+    int m_histCount = 0;
 
     // công tắc → mode: m_modes[sw][pos]; vị trí "đã xác nhận" + ứng viên debounce
     std::array<std::array<QString, 3>, 4> m_modes;

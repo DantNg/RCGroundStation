@@ -17,8 +17,11 @@ namespace gcs::bridge {
 
 namespace {
 constexpr int64_t kDebounceMs = 60;  // công tắc phải đứng yên ngần này mới tính là đổi
-constexpr int kMinHalfSpan = 150;    // raw ADC tối thiểu từ tâm tới mỗi đầu khi hiệu chỉnh
+constexpr int kMinSpan = 300;         // hành trình min→max tối thiểu để một kênh được ghi
 constexpr int kAutoSelectSpan = 1000; // hành trình min→max để kênh tự được chọn ghi
+// Tâm chụp được nằm sát một đầu (< 15% hành trình) ⇒ cần không tự về giữa (ga):
+// dùng điểm giữa min/max làm tâm thay vì báo lỗi.
+constexpr double kEdgeCenterFrac = 0.15;
 const char *const kPosNames[3] = {"LOW", "MID", "HIGH"};
 
 QString switchesPath()
@@ -158,8 +161,12 @@ void RcViewModel::poll()
             m_controls[i] = st->controlsUs[i];
             m_channels[i] = st->channelsUs[i];
         }
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < 6; ++i) {
             m_rawAdc[i] = st->rawAdc[i];
+            m_adcHist[i][m_histPos] = st->rawAdc[i];
+        }
+        m_histPos = (m_histPos + 1) % kHistLen;
+        m_histCount = std::min(m_histCount + 1, kHistLen);
         emit stateChanged();
 
         if (st->calibLoaded != m_calibLoaded || st->elrsOutput != m_elrsOutput) {
@@ -291,7 +298,7 @@ void RcViewModel::saveSwitchModes() const
         f.write(QJsonDocument(o).toJson(QJsonDocument::Indented));
 }
 
-// ── cấu hình STM32 (MAP + CAL) ────────────────────────────────────────────────
+// ── cấu hình STM32 (MAP + CAL + REVERSE) ──────────────────────────────────────
 
 void RcViewModel::refreshConfig()
 {
@@ -305,6 +312,15 @@ void RcViewModel::refreshConfig()
             if (m_channelSources[ch] != name) {
                 m_channelSources[ch] = name;
                 emit channelSourcesChanged();
+            }
+        });
+    }
+    for (quint8 src = 0; src < 8; ++src) {
+        m_link->configRead(rc::kSubReverse, src, [this, src](int status, const QByteArray &v) {
+            const int r = (status == rc::kStatusOk && !v.isEmpty()) ? (v[0] ? 1 : 0) : -1;
+            if (m_reverse[src] != r) {
+                m_reverse[src] = r;
+                emit reverseChanged();
             }
         });
     }
@@ -329,7 +345,16 @@ void RcViewModel::setMessage(const QString &msg, bool error)
 
 bool RcViewModel::calChannelValid(int ch) const
 {
-    return m_calMid[ch] - m_calMin[ch] >= kMinHalfSpan && m_calMax[ch] - m_calMid[ch] >= kMinHalfSpan;
+    return m_calMax[ch] - m_calMin[ch] >= kMinSpan && m_calMin[ch] < m_calMid[ch] && m_calMid[ch] < m_calMax[ch];
+}
+
+QString RcViewModel::calDetail(int ch) const
+{
+    return QStringLiteral("%1 (min %2 · tâm %3 · max %4)")
+        .arg(QLatin1String(rc::kAdcChannels[ch]))
+        .arg(m_calMin[ch])
+        .arg(m_calMid[ch])
+        .arg(m_calMax[ch]);
 }
 
 QStringList RcViewModel::selectedCalNames() const
@@ -364,8 +389,8 @@ void RcViewModel::toggleCalChannel(int ch)
     if (ch < 0 || ch > 5 || m_calStep == 0 || m_busy)
         return;
     if (m_calStep == 2 && !m_calUse[ch] && !calChannelValid(ch)) {
-        setMessage(QStringLiteral("%1 chưa đủ hành trình / tâm lệch — không thể chọn. HUỶ rồi làm lại nếu cần.")
-                       .arg(QLatin1String(rc::kAdcChannels[ch])),
+        setMessage(QStringLiteral("Hành trình quá ngắn: %1 — không thể chọn. HUỶ rồi làm lại nếu cần.")
+                       .arg(calDetail(ch)),
                    true);
         return;
     }
@@ -378,28 +403,61 @@ void RcViewModel::captureCenter()
 {
     if (m_calStep != 1)
         return;
-    for (int i = 0; i < 6; ++i)
-        m_calMid[i] = m_rawAdc[i].toInt();
-
     if (selectedCalNames().isEmpty()) {
         setMessage(QStringLiteral("Chưa chọn kênh nào — đẩy cần cần hiệu chỉnh hoặc chạm hàng để chọn."), true);
         return;
     }
-    QStringList bad;
+
+    // tâm = trung bình vài frame gần nhất (lọc nhiễu / cần còn rung khi vừa thả)
+    QStringList midpointUsed;
     for (int i = 0; i < 6; ++i) {
-        if (m_calUse[i] && !calChannelValid(i))
-            bad << QLatin1String(rc::kAdcChannels[i]);
+        int sum = 0;
+        for (int k = 0; k < m_histCount; ++k)
+            sum += m_adcHist[i][k];
+        const int raw = m_histCount > 0 ? sum / m_histCount : m_rawAdc[i].toInt();
+        // trung bình có thể lệch khỏi min/max vừa ghi một chút — kẹp lại
+        m_calMin[i] = std::min(m_calMin[i], raw);
+        m_calMax[i] = std::max(m_calMax[i], raw);
+        m_calMid[i] = raw;
+
+        const int span = m_calMax[i] - m_calMin[i];
+        const int edge = static_cast<int>(span * kEdgeCenterFrac);
+        if (span >= kMinSpan && (raw - m_calMin[i] < edge || m_calMax[i] - raw < edge)) {
+            m_calMid[i] = (m_calMin[i] + m_calMax[i]) / 2;
+            if (m_calUse[i])
+                midpointUsed << QLatin1String(rc::kAdcChannels[i]);
+        }
     }
-    if (!bad.isEmpty()) {
-        setMessage(QStringLiteral("Hành trình chưa đủ / tâm lệch: %1 — đẩy tiếp (hoặc bỏ chọn) rồi bấm ĐẶT TÂM lại.")
-                       .arg(bad.join(QStringLiteral(", "))),
+
+    QStringList ok, bad;
+    for (int i = 0; i < 6; ++i) {
+        if (!m_calUse[i])
+            continue;
+        (calChannelValid(i) ? ok : bad) << calDetail(i);
+        qInfo("[rc] calib %s valid=%d", qPrintable(calDetail(i)), int(calChannelValid(i)));
+    }
+    if (ok.isEmpty()) {
+        setMessage(QStringLiteral("Hành trình quá ngắn (cần ≥ %1): %2 — đẩy tiếp hết hai đầu rồi bấm ĐẶT TÂM lại.")
+                       .arg(kMinSpan)
+                       .arg(bad.join(QStringLiteral("; "))),
                    true);
         return; // vẫn ở bước 1, tiếp tục ghi min/max
     }
+    // kênh hỏng bị bỏ qua thay vì chặn cả lượt
+    for (int i = 0; i < 6; ++i)
+        if (m_calUse[i] && !calChannelValid(i))
+            m_calUse[i] = false;
+
     m_calStep = 2;
-    setMessage(QStringLiteral("Đã chụp tâm. Sẽ ghi: %1 (kênh khác giữ nguyên). Bấm GHI để áp dụng — có hiệu lực ngay.")
-                   .arg(selectedCalNames().join(QStringLiteral(", "))),
-               false);
+    QString msg = QStringLiteral("Đã chụp tâm. Sẽ ghi: %1 (kênh khác giữ nguyên).")
+                      .arg(selectedCalNames().join(QStringLiteral(", ")));
+    if (!midpointUsed.isEmpty())
+        msg += QStringLiteral(" Tâm %1 nằm sát đầu → dùng điểm giữa hành trình.")
+                   .arg(midpointUsed.join(QStringLiteral(", ")));
+    if (!bad.isEmpty())
+        msg += QStringLiteral(" Bỏ qua (hành trình ngắn): %1.").arg(bad.join(QStringLiteral("; ")));
+    msg += QStringLiteral(" Bấm GHI để áp dụng.");
+    setMessage(msg, !bad.isEmpty());
 }
 
 void RcViewModel::cancelCalibration()
@@ -448,6 +506,36 @@ void RcViewModel::applyCalibration()
             refreshConfig();
         });
     }
+}
+
+QVariantList RcViewModel::reversed() const
+{
+    QVariantList out;
+    for (int r : m_reverse)
+        out.append(r);
+    return out;
+}
+
+void RcViewModel::setReverse(int src, bool on)
+{
+    if (src < 0 || src > 7 || m_busy || !m_connected)
+        return;
+    m_busy = true;
+    const QString name = QLatin1String(rc::kControls[src]);
+    QByteArray payload(1, static_cast<char>(src));
+    payload.append(static_cast<char>(on ? 1 : 0));
+    m_link->configWrite(rc::kSubReverse, payload, [this, src, on, name](int status, const QByteArray &) {
+        m_busy = false;
+        if (status == rc::kStatusOk) {
+            m_reverse[src] = on ? 1 : 0;
+            emit reverseChanged();
+            setMessage(QStringLiteral("%1: %2 (RAM, có hiệu lực ngay). Bấm LƯU FLASH để giữ.")
+                           .arg(name, on ? QStringLiteral("ĐẢO chiều") : QStringLiteral("chiều thường")),
+                       false);
+        } else {
+            setMessage(QStringLiteral("Đảo chiều %1 lỗi: %2").arg(name, rc::statusName(status)), true);
+        }
+    });
 }
 
 void RcViewModel::saveConfig()

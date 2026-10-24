@@ -37,6 +37,7 @@ constexpr quint8 kCmdAck = 0x30;
 
 // sub-id cấu hình (§6)
 constexpr quint8 kSubCal = 0x01;
+constexpr quint8 kSubReverse = 0x05;
 constexpr quint8 kSubMap = 0x10;
 
 constexpr int kStatusOk = 0;
