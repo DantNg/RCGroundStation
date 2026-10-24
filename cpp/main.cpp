@@ -9,6 +9,7 @@
 // Kết nối. Thử không cần phần cứng: chạy bộ mô phỏng rồi kết nối UDP cổng 14550.
 #include "app/controller.h"
 #include "bridge/backend.h"
+#include "bridge/rc_view_model.h"
 #include "bridge/telemetry_view_model.h"
 #include "config.h"
 #include "domain/roles.h"
@@ -50,9 +51,15 @@ int main(int argc, char *argv[])
     gcs::bridge::TelemetryViewModel telemetry(&controller);
     gcs::bridge::Backend backend(&controller, config);
 
+    // Tay điều khiển RC (STM32 qua UART): giám sát công tắc, gán mode, hiệu chỉnh.
+    const QString rcPort = qEnvironmentVariableIsSet("LITEGCS_RC_PORT")
+                               ? qEnvironmentVariable("LITEGCS_RC_PORT") : config.rcPort;
+    gcs::bridge::RcViewModel rc(&controller, rcPort);
+
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("telemetry"), &telemetry);
     engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
+    engine.rootContext()->setContextProperty(QStringLiteral("rc"), &rc);
 
     // Kho định nghĩa nhà cung cấp tile cho plugin OSM của Qt Location. Bản đồ 2D
     // vệ tinh (Esri World Imagery) dùng thứ tự tile z/y/x — plugin custom.host chỉ

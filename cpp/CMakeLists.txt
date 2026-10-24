@@ -45,8 +45,11 @@ set(SOURCES
     src/app/link_manager.cpp
     src/app/controller.cpp
 
+    src/rc/rc_link.cpp
+
     src/bridge/telemetry_view_model.cpp
     src/bridge/backend.cpp
+    src/bridge/rc_view_model.cpp
 )
 
 qt_add_executable(LiteGCS WIN32 ${SOURCES})
@@ -81,6 +84,7 @@ qt_add_qml_module(LiteGCS
         qml/TelemetryStrip.qml
         qml/ConnectionCard.qml
         qml/WarningBanners.qml
+        qml/RcSettings.qml
     RESOURCES
         qml/fonts/JetBrainsMono-Regular.ttf
         qml/fonts/ChakraPetch-Medium.ttf

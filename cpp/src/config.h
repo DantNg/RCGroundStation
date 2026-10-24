@@ -5,6 +5,7 @@
 #pragma once
 
 #include <QString>
+#include <QtGlobal>
 
 namespace gcs {
 
@@ -15,6 +16,14 @@ struct AppConfig {
     int udpPort = 14550;
     QString tcpHost = QStringLiteral("127.0.0.1");
     int tcpPort = 5760;
+
+    // Cổng UART tới tay điều khiển RC (STM32, luồng RC_STATE). Trên Pi là
+    // /dev/ttyAMA2; để trống để tắt. Biến môi trường LITEGCS_RC_PORT ghi đè.
+#ifdef Q_OS_LINUX
+    QString rcPort = QStringLiteral("/dev/ttyAMA2");
+#else
+    QString rcPort;
+#endif
 
     // Vai trò của bản dựng này trong hệ phân cấp: "admin" | "controller" |
     // "viewer". Quyết định quyền điều khiển (xem domain/roles.h).

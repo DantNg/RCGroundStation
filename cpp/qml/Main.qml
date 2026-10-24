@@ -38,20 +38,24 @@ ApplicationWindow {
         id: viewport
         anchors.fill: parent
 
-        // ── "thiết bị" 800×480, scale-to-fit, bo góc ───────────────────────
+        // ── "thiết bị" cao 480 logic, scale-to-fit, bo góc ─────────────────
+        // Rộng tối thiểu 800 và nở theo tỉ lệ màn hình để không bị viền đen:
+        // màn DSI 1280×720 của Pi (16:9) → 853×480 logic, scale 1.5.
         Rectangle {
             id: device
-            width: 800
+            width: Math.max(800, Math.round(480 * viewport.width / Math.max(1, viewport.height)))
             height: 480
             anchors.centerIn: parent
             scale: Math.min(viewport.width / width, viewport.height / height)
-            radius: 16
+            radius: win.visibility === Window.FullScreen ? 0 : 16
             color: Theme.bg
             border.color: Theme.stroke
             clip: true
 
             // view chính đang hiển thị: "MAP" | "CAM" | "HUD"
             property string mainView: "MAP"
+            // trang cài đặt RC (⚙ trên thanh trạng thái)
+            property bool settingsOpen: Qt.application.arguments.indexOf("--rc-setup") >= 0
 
             ColumnLayout {
                 anchors.fill: parent
@@ -60,6 +64,8 @@ ApplicationWindow {
                 StatusBar {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 38
+                    settingsOpen: device.settingsOpen
+                    onSettingsRequested: device.settingsOpen = !device.settingsOpen
                 }
 
                 RowLayout {
@@ -98,7 +104,15 @@ ApplicationWindow {
             // ── thẻ kết nối (giữa, khi chưa kết nối) ───────────────────────
             ConnectionCard {
                 anchors.centerIn: parent
-                visible: !telemetry.connected
+                visible: !telemetry.connected && !device.settingsOpen
+            }
+
+            // ── cài đặt RC: phủ mọi thứ dưới thanh trạng thái ─────────────
+            RcSettings {
+                anchors.fill: parent
+                anchors.topMargin: 38
+                visible: device.settingsOpen
+                onCloseRequested: device.settingsOpen = false
             }
         }
     }

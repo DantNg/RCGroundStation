@@ -1,4 +1,4 @@
-// Thanh trạng thái trên (38px) — logo, ARM, MODE, T+, RF, GPS, pin.
+// Thanh trạng thái trên (38px) — logo, ARM, MODE, T+, RF, GPS, RC, pin, ⚙, thoát.
 // Bám mockup: nền gradient, viền dưới, chữ Chakra Petch + số JetBrains Mono.
 import QtQuick
 import QtQuick.Layouts
@@ -6,6 +6,9 @@ import GroundCtrl
 
 Rectangle {
     id: root
+
+    property bool settingsOpen: false
+    signal settingsRequested()
 
     gradient: Gradient {
         GradientStop { position: 0.0; color: Theme.topbar1 }
@@ -98,6 +101,13 @@ Rectangle {
             valueColor: Theme.accent
         }
 
+        // ── tay điều khiển RC (STM32) ───────────────────────────────────────
+        MiniStat {
+            label: "RC"
+            value: rc.connected ? rc.fps + "Hz" : "OFF"
+            valueColor: rc.connected ? Theme.accent : Theme.danger
+        }
+
         VSep {}
 
         // ── pin ─────────────────────────────────────────────────────────────
@@ -124,10 +134,25 @@ Rectangle {
             }
         }
 
+        // ── cài đặt RC (công tắc / hiệu chỉnh / kênh) ───────────────────────
+        Rectangle {
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: 30; implicitHeight: 26; radius: 4
+            color: root.settingsOpen ? "#2637e0a0" : "transparent"
+            border.color: root.settingsOpen ? Theme.accent : Theme.stroke
+            Text { anchors.centerIn: parent; text: "⚙"; color: root.settingsOpen ? Theme.accent : Theme.text
+                   font.pixelSize: 15 }
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.settingsRequested()
+            }
+        }
+
         // ── thoát (toàn màn hình không có nút X hệ thống) ───────────────────
         Rectangle {
             Layout.alignment: Qt.AlignVCenter
-            implicitWidth: 20; implicitHeight: 20; radius: 4
+            implicitWidth: 30; implicitHeight: 26; radius: 4
             color: quitMa.containsMouse ? "#33ff3b3b" : "transparent"
             border.color: quitMa.containsMouse ? Theme.danger : Theme.stroke
             Text { anchors.centerIn: parent; text: "✕"; color: Theme.danger

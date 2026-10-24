@@ -49,6 +49,7 @@ AppConfig AppConfig::load()
     if (o.contains("tcp_host"))        cfg.tcpHost = o.value("tcp_host").toString(cfg.tcpHost);
     if (o.contains("tcp_port"))        cfg.tcpPort = o.value("tcp_port").toInt(cfg.tcpPort);
     if (o.contains("role"))            cfg.role = o.value("role").toString(cfg.role);
+    if (o.contains("rc_port"))         cfg.rcPort = o.value("rc_port").toString(cfg.rcPort);
     return cfg;
 }
 
@@ -63,6 +64,7 @@ void AppConfig::save() const
     o["tcp_host"] = tcpHost;
     o["tcp_port"] = tcpPort;
     o["role"] = role;
+    o["rc_port"] = rcPort;
     QFile f(configPath());
     if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
         f.write(QJsonDocument(o).toJson(QJsonDocument::Indented));
