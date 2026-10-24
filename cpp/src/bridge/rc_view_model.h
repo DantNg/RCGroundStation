@@ -9,7 +9,9 @@
 //     ~/.lite_gcs/rc_switches.json. Lần đọc đầu chỉ làm mốc — không tự đổi mode.
 //  3. Hiệu chỉnh cần gạt: ghi min/max khi người dùng đẩy hết hành trình, chụp
 //     tâm, rồi GHI (RAM STM32, có hiệu lực ngay) và LƯU (flash) — luôn do người
-//     dùng bấm, không bao giờ tự gửi (PI_UI_AGENT_GUIDE.md §6).
+//     dùng bấm, không bao giờ tự gửi (PI_UI_AGENT_GUIDE.md §6). Chỉ những kênh
+//     được chọn mới ghi: kênh tự được chọn khi đẩy đủ hành trình; kênh không
+//     đụng tới giữ nguyên hiệu chỉnh cũ.
 #pragma once
 
 #include "app/controller.h"
@@ -53,6 +55,9 @@ class RcViewModel : public QObject {
     Q_PROPERTY(QStringList availableModes READ availableModes CONSTANT)
     Q_PROPERTY(QString lastAction READ lastAction NOTIFY lastActionChanged)
 
+    // hiển thị: đổi chỗ gimbal trái/phải (cần LH/LV nằm bên phải trên tay cầm)
+    Q_PROPERTY(bool gimbalSwap READ gimbalSwap WRITE setGimbalSwap NOTIFY gimbalSwapChanged)
+
     // ── hiệu chỉnh ──────────────────────────────────────────────────────────
     // calStep: 0 = rảnh, 1 = đang ghi hành trình min/max, 2 = đã chụp tâm (chờ GHI)
     Q_PROPERTY(int calStep READ calStep NOTIFY calChanged)
@@ -61,6 +66,8 @@ class RcViewModel : public QObject {
     Q_PROPERTY(QVariantList calMid READ calMid NOTIFY calChanged)
     Q_PROPERTY(QVariantList calMax READ calMax NOTIFY calChanged)
     Q_PROPERTY(QVariantList storedCal READ storedCal NOTIFY calChanged) // 6 × [min,mid,max] | []
+    // kênh nào sẽ được ghi: tự bật khi kênh được đẩy đủ hành trình, chạm để bật/tắt tay
+    Q_PROPERTY(QVariantList calUse READ calUse NOTIFY calChanged)
     Q_PROPERTY(QString calMessage READ calMessage NOTIFY calChanged)
     Q_PROPERTY(bool calMessageError READ calMessageError NOTIFY calChanged)
 
@@ -89,12 +96,16 @@ public:
     QStringList availableModes() const;
     QString lastAction() const { return m_lastAction; }
 
+    bool gimbalSwap() const { return m_gimbalSwap; }
+    void setGimbalSwap(bool on);
+
     int calStep() const { return m_calStep; }
     bool busy() const { return m_busy; }
     QVariantList calMin() const { return toList(m_calMin); }
     QVariantList calMid() const { return toList(m_calMid); }
     QVariantList calMax() const { return toList(m_calMax); }
     QVariantList storedCal() const;
+    QVariantList calUse() const;
     QString calMessage() const { return m_calMessage; }
     bool calMessageError() const { return m_calMessageError; }
 
@@ -103,6 +114,7 @@ public:
     Q_INVOKABLE void startCalibration();
     Q_INVOKABLE void captureCenter();
     Q_INVOKABLE void cancelCalibration();
+    Q_INVOKABLE void toggleCalChannel(int ch); // bật/tắt ghi kênh này (tắt chế độ tự chọn của kênh)
     Q_INVOKABLE void applyCalibration(); // CONFIG_WRITE CAL × 6 (RAM)
     Q_INVOKABLE void saveConfig();       // CONFIG_SAVE (flash)
     Q_INVOKABLE void refreshConfig();    // đọc lại MAP + CAL
@@ -115,6 +127,7 @@ signals:
     void channelSourcesChanged();
     void switchModesChanged();
     void lastActionChanged();
+    void gimbalSwapChanged();
     void calChanged();
 
 private:
@@ -123,6 +136,8 @@ private:
     void poll();
     void handleSwitches(const rc::RcState &st);
     void setMessage(const QString &msg, bool error);
+    bool calChannelValid(int ch) const;
+    QStringList selectedCalNames() const;
     void loadSwitchModes();
     void saveSwitchModes() const;
 
@@ -150,10 +165,13 @@ private:
     std::array<int, 4> m_candPos{{-1, -1, -1, -1}};
     std::array<qint64, 4> m_candSince{};
     QString m_lastAction;
+    bool m_gimbalSwap = false;
 
     int m_calStep = 0;
     bool m_busy = false;
     std::array<int, 6> m_calMin{}, m_calMid{}, m_calMax{};
+    std::array<bool, 6> m_calUse{};    // kênh sẽ được ghi
+    std::array<bool, 6> m_calManual{}; // người dùng đã tự chọn → không tự bật nữa
     std::array<std::array<int, 3>, 6> m_stored{};
     std::array<bool, 6> m_storedValid{};
     QString m_calMessage;

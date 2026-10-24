@@ -228,14 +228,26 @@ Rectangle {
             RowLayout {
                 spacing: 10
 
-                // hai gimbal (dot = (H, -V)), số µs dưới mỗi trục
+                // hai gimbal (dot = (H, -V)), số µs dưới mỗi trục. Nút ⇄ đổi chỗ
+                // trái/phải khi cần LH/LV nằm bên phải trên tay cầm (lưu lại).
                 ColumnLayout {
                     Layout.fillHeight: true
                     spacing: 6
                     RowLayout {
                         spacing: 10
-                        Gimbal { title: "TRÁI"; h: rc.controls[0]; v: rc.controls[1]; hName: "LH"; vName: "LV" }
-                        Gimbal { title: "PHẢI"; h: rc.controls[2]; v: rc.controls[3]; hName: "RH"; vName: "RV" }
+                        Gimbal { title: "TRÁI"
+                                 readonly property int b: rc.gimbalSwap ? 2 : 0
+                                 h: rc.controls[b]; v: rc.controls[b + 1]
+                                 hName: rc.gimbalSwap ? "RH" : "LH"; vName: rc.gimbalSwap ? "RV" : "LV" }
+                        Gimbal { title: "PHẢI"
+                                 readonly property int b: rc.gimbalSwap ? 0 : 2
+                                 h: rc.controls[b]; v: rc.controls[b + 1]
+                                 hName: rc.gimbalSwap ? "LH" : "RH"; vName: rc.gimbalSwap ? "LV" : "RV" }
+                    }
+                    Toggle {
+                        checked: rc.gimbalSwap
+                        label: "⇄ ĐỔI TRÁI / PHẢI"
+                        onToggled: rc.gimbalSwap = !rc.gimbalSwap
                     }
                     Item { Layout.fillHeight: true }
                 }
@@ -243,42 +255,33 @@ Rectangle {
                 ColumnLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    spacing: 4
+                    spacing: 2
 
-                    // bảng raw ADC
-                    GridLayout {
-                        Layout.fillWidth: true
-                        columns: 6
-                        rowSpacing: 2
-                        columnSpacing: 6
-                        Repeater {
-                            model: ["KÊNH", "RAW", "MIN", "TÂM", "MAX", "ĐANG LƯU"]
-                            delegate: Text { required property string modelData
-                                text: modelData; color: Theme.dim
-                                font.family: Theme.mono; font.pixelSize: 9; font.letterSpacing: 1
-                                Layout.fillWidth: true }
-                        }
-                        Repeater {
-                            model: 6 * 6
-                            delegate: Text {
-                                required property int index
-                                readonly property int row: Math.floor(index / 6)
-                                readonly property int col: index % 6
-                                readonly property bool live: rc.calStep > 0
-                                readonly property var stored: rc.storedCal[row]
-                                Layout.fillWidth: true
-                                font.family: Theme.mono; font.pixelSize: 12
-                                font.bold: col === 0
-                                color: col === 0 ? Theme.text
-                                       : (col === 1 ? Theme.accent
-                                          : (col === 5 ? Theme.sub : (live ? Theme.warn : Theme.dim)))
-                                text: col === 0 ? root.adcNames[row]
-                                      : col === 1 ? rc.rawAdc[row]
-                                      : col === 2 ? (live ? rc.calMin[row] : "—")
-                                      : col === 3 ? (rc.calStep === 2 ? rc.calMid[row] : "—")
-                                      : col === 4 ? (live ? rc.calMax[row] : "—")
-                                      : (stored && stored.length === 3 ? stored[0] + "/" + stored[1] + "/" + stored[2] : "?")
-                            }
+                    // bảng raw ADC — mỗi hàng chạm được để chọn/bỏ ghi kênh đó
+                    // (chỉ khi đang hiệu chỉnh; kênh đủ hành trình tự được chọn).
+                    CalRow {
+                        header: true
+                        cells: ["GHI", "KÊNH", "RAW", "MIN", "TÂM", "MAX", "ĐANG LƯU"]
+                    }
+                    Repeater {
+                        model: 6
+                        delegate: CalRow {
+                            required property int index
+                            readonly property bool live: rc.calStep > 0
+                            readonly property bool use: rc.calUse[index] === true
+                            readonly property var stored: rc.storedCal[index]
+                            selected: live && use
+                            dimmed: live && !use
+                            onTapped: rc.toggleCalChannel(index)
+                            cells: [
+                                live ? (use ? "☑" : "☐") : "",
+                                root.adcNames[index],
+                                rc.rawAdc[index],
+                                live ? rc.calMin[index] : "—",
+                                rc.calStep === 2 ? rc.calMid[index] : "—",
+                                live ? rc.calMax[index] : "—",
+                                stored && stored.length === 3 ? stored[0] + "/" + stored[1] + "/" + stored[2] : "?"
+                            ]
                         }
                     }
 
@@ -288,7 +291,7 @@ Rectangle {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: rc.calMessage !== "" ? rc.calMessage
-                              : "Hiệu chỉnh: BẮT ĐẦU → đẩy hết hành trình → về tâm → ĐẶT TÂM → GHI → LƯU FLASH."
+                              : "Hiệu chỉnh: BẮT ĐẦU → đẩy hết hành trình kênh cần chỉnh → về tâm → ĐẶT TÂM → GHI → LƯU FLASH. Kênh không đụng tới giữ nguyên."
                         color: rc.calMessageError ? Theme.dangerSoft : Theme.sub
                         font.family: Theme.ui; font.pixelSize: 11
                     }
@@ -410,6 +413,47 @@ Rectangle {
     }
 
     // ── phần tử phụ ─────────────────────────────────────────────────────────
+    // một hàng bảng hiệu chỉnh: 7 ô (GHI, KÊNH, RAW, MIN, TÂM, MAX, ĐANG LƯU)
+    component CalRow: Rectangle {
+        property var cells: []
+        property bool header: false
+        property bool selected: false
+        property bool dimmed: false
+        signal tapped()
+        readonly property var widths: [34, 40, 50, 50, 50, 50, 0] // 0 = phần còn lại
+        Layout.fillWidth: true
+        Layout.preferredHeight: header ? 18 : 32
+        radius: 5
+        color: selected ? "#1637e0a0" : "transparent"
+        border.color: selected ? Theme.accent : (header ? "transparent" : Theme.strokeSoft)
+        opacity: dimmed ? 0.5 : 1
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 6; anchors.rightMargin: 6
+            spacing: 6
+            Repeater {
+                model: cells.length
+                delegate: Text {
+                    required property int index
+                    Layout.preferredWidth: widths[index]
+                    Layout.fillWidth: widths[index] === 0
+                    text: cells[index]
+                    font.family: Theme.mono
+                    font.pixelSize: header ? 9 : (index === 0 ? 16 : 12)
+                    font.letterSpacing: header ? 1 : 0
+                    font.bold: !header && index === 1
+                    color: header ? Theme.dim
+                           : index === 0 ? Theme.accent
+                           : index === 1 ? Theme.text
+                           : index === 2 ? Theme.accent
+                           : index === 6 ? Theme.sub
+                           : (rc.calStep > 0 ? Theme.warn : Theme.dim)
+                }
+            }
+        }
+        MouseArea { anchors.fill: parent; enabled: !header && rc.calStep > 0 && !rc.busy; onClicked: parent.tapped() }
+    }
+
     component Toggle: Rectangle {
         property bool checked
         property string label
