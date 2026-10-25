@@ -34,6 +34,23 @@ ApplicationWindow {
     FontLoader { source: "fonts/ChakraPetch-Medium.ttf" }
     FontLoader { source: "fonts/ChakraPetch-Bold.ttf" }
 
+    // banner RC — chạm để mở trang cài đặt RC ở tab CẤU HÌNH
+    component RcBanner: Rectangle {
+        property string text
+        property color tint: Theme.warn
+        implicitWidth: bnTxt.implicitWidth + 24
+        implicitHeight: 30
+        radius: 6
+        color: Qt.rgba(tint.r, tint.g, tint.b, 0.22)
+        border.color: tint
+        Text { id: bnTxt; anchors.centerIn: parent; text: "● " + parent.text; color: parent.tint
+               font.family: Theme.mono; font.pixelSize: 11; font.bold: true }
+        MouseArea {
+            anchors.fill: parent
+            onClicked: { rcSettings.tab = "CFG"; device.settingsOpen = true }
+        }
+    }
+
     Item {
         id: viewport
         anchors.fill: parent
@@ -108,7 +125,31 @@ ApplicationWindow {
             }
 
             // ── cài đặt RC: phủ mọi thứ dưới thanh trạng thái ─────────────
+            // ── banner RC (luôn hiện, guide §5/§6.2): cần lái giao cho Pi / chưa lưu ─
+            // góc dưới-trái vùng xem (tránh banner cảnh báo trên-giữa và ô PiP)
+            Column {
+                anchors.left: parent.left
+                anchors.leftMargin: 8
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 80 + 8 // trên dải telemetry
+                spacing: 6
+                visible: !device.settingsOpen && rc.connected
+                z: 50
+
+                RcBanner {
+                    visible: !rc.stickCrsf
+                    text: "CẦN LÁI → PI · drone nhận giá trị giữ"
+                    tint: Theme.danger
+                }
+                RcBanner {
+                    visible: rc.dirty
+                    text: "CẤU HÌNH RC CHƯA LƯU"
+                    tint: Theme.warn
+                }
+            }
+
             RcSettings {
+                id: rcSettings
                 anchors.fill: parent
                 anchors.topMargin: 38
                 visible: device.settingsOpen

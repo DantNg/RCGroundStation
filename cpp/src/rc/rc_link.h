@@ -33,12 +33,30 @@ constexpr quint8 kModeRcState = 0x03;
 constexpr quint8 kCmdConfigWrite = 0x10;
 constexpr quint8 kCmdConfigRead = 0x11;
 constexpr quint8 kCmdConfigSave = 0x12;
+constexpr quint8 kCmdConfigDefaults = 0x13; // [keep_cal 0/1]
+constexpr quint8 kCmdConfigReload = 0x14;   // RAM ← flash (bỏ thay đổi chưa lưu)
+constexpr quint8 kCmdCalStart = 0x15;       // [mask] (0 = tất cả)
+constexpr quint8 kCmdCalCenter = 0x16;      // [mask]
+constexpr quint8 kCmdCalApply = 0x17;       // [save 0/1] → ACK [.., status, mask]
+constexpr quint8 kCmdCalCancel = 0x18;
+constexpr quint8 kCmdCalStatus = 0x19;      // → ACK [.., status, active, range, center, 6×(min,mid,max)]
 constexpr quint8 kCmdAck = 0x30;
 
 // sub-id cấu hình (§6)
 constexpr quint8 kSubCal = 0x01;
 constexpr quint8 kSubReverse = 0x05;
 constexpr quint8 kSubMap = 0x10;
+constexpr quint8 kSubElrsOut = 0x23;    // [0/1] toàn bộ RC ra radio (tắt = drone failsafe)
+constexpr quint8 kSubStickCrsf = 0x30;  // [0/1] cần lái → mLRS (0 = giá trị giữ, Pi điều khiển)
+constexpr quint8 kSubStickHold = 0x31;  // [src 0..3][u16 µs] giá trị gửi khi STICK_CRSF = 0
+constexpr quint8 kSubStickTrim = 0x32;  // [0/1] 1 = trim cố định kiểu cũ, 0 = calib 3 điểm
+
+// mặt nạ kênh hiệu chỉnh (bit = LH,LV,RH,RV,SB,SC)
+constexpr quint8 kCalMaskSticks = 0x0F;
+constexpr quint8 kCalMaskSwitches = 0x30;
+constexpr quint8 kCalMaskAll = 0x3F;
+
+constexpr int kStatusRange = 5;
 
 constexpr int kStatusOk = 0;
 constexpr int kStatusTimeout = -1; // không có ACK
@@ -59,6 +77,9 @@ struct RcState {
     std::array<int, 4> switchPos{};  // SA..SD: 0=LOW 1=MID 2=HIGH
     bool calibLoaded = false;
     bool elrsOutput = false;
+    bool stickCrsf = true;   // cần lái → drone qua mLRS (false = giao cho Pi)
+    bool calActive = false;  // STM32 đang mở phiên hiệu chỉnh
+    bool dirty = false;      // RAM STM32 có thay đổi chưa lưu flash
     qint64 timestampMs = 0;          // QDateTime/steady ms lúc nhận
 };
 
@@ -100,6 +121,8 @@ public:
     quint64 badFrames() const { return m_badFrames; }
 
     // ── lệnh (bất đồng bộ, xếp hàng) ────────────────────────────────────────
+    // Callback nhận status và phần ACK sau byte status (configRead bỏ thêm byte sub).
+    void command(quint8 cmd, const QByteArray &data, int timeoutMs, AckCallback cb);
     void configRead(quint8 sub, std::optional<quint8> idx, AckCallback cb);
     void configWrite(quint8 sub, const QByteArray &payload, AckCallback cb);
     void configSave(AckCallback cb);

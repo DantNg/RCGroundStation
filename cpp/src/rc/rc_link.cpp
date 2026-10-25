@@ -12,6 +12,9 @@ constexpr int kRcStateVersion = 1;
 constexpr int kRcStateLen = 48;
 constexpr quint8 kFlagCalib = 0x01;
 constexpr quint8 kFlagElrsOut = 0x02;
+constexpr quint8 kFlagStickCrsf = 0x04;
+constexpr quint8 kFlagCalActive = 0x08;
+constexpr quint8 kFlagDirty = 0x10;
 constexpr int kMaxPayload = 250;
 constexpr int64_t kConnectedMs = 500;
 constexpr int kReopenMs = 2000;
@@ -65,6 +68,9 @@ std::optional<RcState> decodeRcState(const QByteArray &data)
     const quint8 flags = static_cast<quint8>(data[47]);
     st.calibLoaded = flags & kFlagCalib;
     st.elrsOutput = flags & kFlagElrsOut;
+    st.stickCrsf = flags & kFlagStickCrsf;
+    st.calActive = flags & kFlagCalActive;
+    st.dirty = flags & kFlagDirty;
     st.timestampMs = domain::nowMs();
     return st;
 }
@@ -227,9 +233,9 @@ void RcLink::handleFrame(quint8 cmd, const QByteArray &data)
         m_state = st;
         emit stateReceived();
     } else if (cmd == kCmdAck) {
-        // ACK: [cmd gốc][status][sub][value…]
+        // ACK: [cmd gốc][status][dữ liệu riêng của lệnh…]
         if (m_inFlight && data.size() >= 2 && static_cast<quint8>(data[0]) == m_inFlight->cmd)
-            finishCurrent(static_cast<quint8>(data[1]), data.size() > 3 ? data.mid(3) : QByteArray());
+            finishCurrent(static_cast<quint8>(data[1]), data.mid(2));
     }
 }
 
@@ -244,7 +250,16 @@ void RcLink::configRead(quint8 sub, std::optional<quint8> idx, AckCallback cb)
     QByteArray d(1, static_cast<char>(sub));
     if (idx)
         d.append(static_cast<char>(*idx));
-    enqueue({kCmdConfigRead, d, kAckTimeoutMs, std::move(cb)});
+    // ACK CONFIG_READ: [sub][value…] sau status — bỏ byte sub
+    enqueue({kCmdConfigRead, d, kAckTimeoutMs, [cb = std::move(cb)](int status, const QByteArray &v) {
+                 if (cb)
+                     cb(status, v.mid(1));
+             }});
+}
+
+void RcLink::command(quint8 cmd, const QByteArray &data, int timeoutMs, AckCallback cb)
+{
+    enqueue({cmd, data, timeoutMs, std::move(cb)});
 }
 
 void RcLink::configWrite(quint8 sub, const QByteArray &payload, AckCallback cb)
