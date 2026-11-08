@@ -400,6 +400,7 @@ void RcViewModel::setReverse(int src, bool on)
 
 void RcViewModel::setChannelSource(int ch, int src)
 {
+    constexpr int kMapNone = 0xFF; // SUB_MAP: kênh không có nguồn (giữ 1500)
     if (ch < 0 || ch > 7 || src < 0 || src > 7)
         return;
     auto indexOf = [](const QString &name) {
@@ -408,19 +409,24 @@ void RcViewModel::setChannelSource(int ch, int src)
                 return i;
         return -1;
     };
-    const int oldSrc = indexOf(m_channelSources[ch]);
+    if (m_channelSources[ch] == QLatin1String("?"))
+        return setMessage(QStringLiteral("Chưa đọc được ánh xạ CH%1 — thử đọc lại cấu hình.").arg(ch + 1), true);
+    // kênh đang trống (0xFF, giữ 1500) ⇒ kênh bị lấy nguồn cũng thành trống
+    const int oldSrc = indexOf(m_channelSources[ch]) >= 0 ? indexOf(m_channelSources[ch]) : kMapNone;
     if (oldSrc == src)
         return;
-    if (oldSrc < 0)
-        return setMessage(QStringLiteral("Chưa đọc được ánh xạ CH%1 — thử đọc lại cấu hình.").arg(ch + 1), true);
 
-    auto writeMap = [this](int c, int s, Done onOk) {
+    auto srcName = [](int s) {
+        return s < static_cast<int>(rc::kControls.size()) ? QString::fromLatin1(rc::kControls[s])
+                                                          : QStringLiteral("—");
+    };
+    auto writeMap = [this, srcName](int c, int s, Done onOk) {
         QByteArray payload(1, static_cast<char>(c));
         payload.append(static_cast<char>(s));
         writeConfig(rc::kSubMap, payload,
-                    QStringLiteral("CH%1 ← %2").arg(c + 1).arg(QLatin1String(rc::kControls[s])),
-                    [this, c, s, onOk](int status, const QByteArray &v) {
-                        m_channelSources[c] = QLatin1String(rc::kControls[s]);
+                    QStringLiteral("CH%1 ← %2").arg(c + 1).arg(srcName(s)),
+                    [this, c, s, srcName, onOk](int status, const QByteArray &v) {
+                        m_channelSources[c] = srcName(s);
                         emit configChanged();
                         if (onOk)
                             onOk(status, v);
@@ -430,11 +436,10 @@ void RcViewModel::setChannelSource(int ch, int src)
     // nguồn mới đang cấp kênh khác ⇒ kênh đó nhận nguồn cũ (hoán đổi, không trục nào bị trùng/mất)
     const int other = m_channelSources.indexOf(QLatin1String(rc::kControls[src]));
     if (other >= 0 && other != ch) {
-        writeMap(ch, src, [this, writeMap, ch, other, oldSrc, src](int, const QByteArray &) {
-            writeMap(other, oldSrc, [this, ch, other, oldSrc, src](int, const QByteArray &) {
+        writeMap(ch, src, [this, writeMap, srcName, ch, other, oldSrc, src](int, const QByteArray &) {
+            writeMap(other, oldSrc, [this, srcName, ch, other, oldSrc, src](int, const QByteArray &) {
                 setMessage(QStringLiteral("Đã hoán đổi: CH%1 ← %2, CH%3 ← %4 (RAM). Bấm LƯU để giữ.")
-                               .arg(ch + 1).arg(QLatin1String(rc::kControls[src]))
-                               .arg(other + 1).arg(QLatin1String(rc::kControls[oldSrc])));
+                               .arg(ch + 1).arg(srcName(src)).arg(other + 1).arg(srcName(oldSrc)));
             });
         });
     } else {

@@ -22,8 +22,8 @@ Rectangle {
     readonly property var posNames: ["LOW", "MID", "HIGH"]
     readonly property var adcNames: ["LH", "LV", "RH", "RV", "SB", "SC"]
     readonly property var stickNames: ["LH", "LV", "RH", "RV"]
-    // chức năng CH1..4 theo chuẩn ArduPilot (RCMAP mặc định)
-    readonly property var stickFuncs: ["ROLL", "PITCH", "THROTTLE", "YAW"]
+    // chức năng CH1..8: CH1..4 theo chuẩn ArduPilot (RCMAP mặc định), CH5..8 kênh phụ
+    readonly property var chFuncs: ["ROLL", "PITCH", "THROTTLE", "YAW", "AUX1", "AUX2", "AUX3", "AUX4"]
     // SA/SD 2 vị trí (LOW/HIGH), SB/SC 3 vị trí — liệt kê từ trên xuống
     function positionsOf(sw) { return (sw === 0 || sw === 3) ? [2, 0] : [2, 1, 0] }
     // kênh CRSF đang lấy nguồn `name` ("CH3") — để ghi chú giá trị giữ
@@ -389,29 +389,32 @@ Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         spacing: 10
-                        Text { text: "CH" + (chRow.index + 1); color: Theme.text
-                               font.family: Theme.mono; font.pixelSize: 13; font.bold: true
-                               Layout.preferredWidth: 40 }
-                        Text { text: chRow.index < 4 ? root.stickFuncs[chRow.index] : ""
-                               color: Theme.sub; font.family: Theme.mono; font.pixelSize: 11; font.bold: true
-                               Layout.preferredWidth: 70 }
-                        // CH1..4: chạm để chọn trục cần lái cấp cho kênh (MAP); CH5..8 chỉ hiển thị
+                        // chạm chức năng → gạt cần / công tắc muốn dùng → GÁN (learnPicker)
                         Rectangle {
-                            readonly property bool pickable: chRow.index < 4
-                            readonly property bool usable: pickable && rc.connected && !rc.busy
-                                                            && !rc.calActive && !telemetry.armed
-                            Layout.preferredWidth: 64
-                            Layout.preferredHeight: 32
+                            readonly property bool usable: rc.connected && !rc.busy && !rc.calActive && !telemetry.armed
+                            Layout.preferredWidth: 230
+                            Layout.preferredHeight: 34
                             radius: 6
-                            color: pickable ? Theme.panel : "transparent"
-                            border.color: pickable ? Theme.strokeBtn : "transparent"
-                            opacity: !pickable || usable ? 1 : 0.4
-                            Text { anchors.centerIn: parent
-                                   text: chRow.srcName + (parent.pickable ? " ▾" : "")
-                                   color: parent.pickable ? Theme.text : Theme.dim
-                                   font.family: Theme.mono; font.pixelSize: 12; font.bold: parent.pickable }
-                            MouseArea { anchors.fill: parent; enabled: parent.usable
-                                        onClicked: axisPicker.openFor(chRow.index) }
+                            color: fnMa.pressed ? "#2637e0a0" : Theme.panel
+                            border.color: Theme.strokeBtn
+                            opacity: usable ? 1 : 0.5
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 10; anchors.rightMargin: 10
+                                spacing: 6
+                                Text { text: root.chFuncs[chRow.index]; color: Theme.text
+                                       font.family: Theme.mono; font.pixelSize: 13; font.bold: true
+                                       Layout.preferredWidth: 86 }
+                                Text { text: "CH" + (chRow.index + 1); color: Theme.dim
+                                       font.family: Theme.mono; font.pixelSize: 11
+                                       Layout.preferredWidth: 30 }
+                                Text { text: "← " + chRow.srcName; color: Theme.accent
+                                       font.family: Theme.mono; font.pixelSize: 13; font.bold: true
+                                       Layout.fillWidth: true }
+                                Text { text: "▾"; color: Theme.sub; font.pixelSize: 12 }
+                            }
+                            MouseArea { id: fnMa; anchors.fill: parent; enabled: parent.usable
+                                        onClicked: learnPicker.openFor(chRow.index) }
                         }
                         Rectangle {
                             Layout.fillWidth: true
@@ -467,8 +470,8 @@ Rectangle {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: rc.message !== "" ? rc.message
-                              : (telemetry.armed ? "Drone đang ARM — khoá đổi trục cần lái. "
-                                                 : "Chạm ô trục (▾) của CH1..4 để chọn cần làm ROLL / PITCH / THROTTLE / YAW. ")
+                              : (telemetry.armed ? "Drone đang ARM — khoá gán kênh. "
+                                                 : "Chạm một chức năng rồi gạt cần / công tắc muốn dùng cho nó. ")
                                 + "THƯỜNG / ĐẢO đảo chiều nguồn của kênh. Thay đổi có hiệu lực ngay (RAM) — LƯU để giữ."
                         color: rc.messageError ? Theme.dangerSoft : Theme.sub
                         font.family: Theme.ui; font.pixelSize: 11
@@ -708,112 +711,144 @@ Rectangle {
         }
     }
 
-    // ── chọn trục cần lái cho CH1..4 (ROLL/PITCH/THROTTLE/YAW) ──────────────
-    // Hiện giá trị trực tiếp 4 trục; trục lệch tâm nhiều nhất được đánh dấu
-    // "ĐANG GẠT" để người dùng gạt cần mong muốn rồi chạm vào nó. Trục đã cấp
-    // kênh khác sẽ được hoán đổi (setChannelSource).
+    // ── gán nguồn cho một chức năng (CH1..8) bằng cách gạt ─────────────────
+    // Chọn chức năng → gạt cần / bật công tắc → nguồn dịch khỏi mốc (lúc mở)
+    // nhiều nhất được phát hiện → GÁN. Chạm một nguồn để chọn tay (vd SD luôn
+    // HIGH, không gạt được). Nguồn đã cấp kênh khác ⇒ hoán đổi (setChannelSource).
     Popup {
-        id: axisPicker
+        id: learnPicker
         property int ch: 0
-        // vị trí 4 trục lúc mở — so với mốc này chứ không với 1500, vì cần ga
-        // không tự về giữa
-        property var base: [1500, 1500, 1500, 1500]
-        function openFor(c) { ch = c; base = [0, 1, 2, 3].map(i => rc.controls[i]); open() }
-        // trục đã dịch khỏi mốc nhiều nhất (> 150 µs), -1 nếu chưa gạt trục nào
+        property var base: []
+        property int manual: -1   // nguồn chạm chọn tay, -1 = theo phát hiện
+        property int locked: -1   // nguồn phát hiện gần nhất (giữ lại khi cần đã về giữa)
+        readonly property int pick: manual >= 0 ? manual : locked
+        readonly property int pickUsedBy: pick >= 0 ? rc.channelSources.indexOf(rc.controlNames[pick]) : -1
+        function openFor(c) {
+            ch = c; manual = -1; locked = -1
+            base = [0, 1, 2, 3, 4, 5, 6, 7].map(i => rc.controls[i])
+            open()
+        }
+        // nguồn dịch khỏi mốc nhiều nhất (> 250 µs) — cần ga không tự về giữa nên
+        // so với mốc chứ không với 1500; công tắc nhảy ≥ 500 µs khi đổi vị trí
         readonly property int moving: {
-            let best = -1, dev = 150
-            for (let i = 0; i < 4; ++i) {
+            if (!opened || base.length < 8)
+                return -1
+            let best = -1, dev = 250
+            for (let i = 0; i < 8; ++i) {
                 const d = Math.abs(rc.controls[i] - base[i])
                 if (d > dev) { dev = d; best = i }
             }
             return best
         }
+        onMovingChanged: if (moving >= 0) locked = moving
 
         parent: root
         anchors.centerIn: parent
-        width: Math.min(root.width - 40, 620)
+        width: Math.min(root.width - 40, 680)
         modal: true
         padding: 16
         background: Rectangle { radius: 10; color: "#fa0e1210"; border.color: Theme.stroke }
 
         contentItem: ColumnLayout {
-            spacing: 12
-            Text {
-                text: "CH" + (axisPicker.ch + 1) + " · " + root.stickFuncs[axisPicker.ch] + "  →  chọn trục cần lái"
-                color: Theme.text; font.family: Theme.ui; font.pixelSize: 13; font.bold: true
-            }
-            Text {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: "Gạt cần bạn muốn dùng làm " + root.stickFuncs[axisPicker.ch]
-                      + " — trục đó sẽ sáng lên — rồi chạm vào nó. Nếu trục đã cấp kênh khác, hai kênh được hoán đổi."
-                color: Theme.sub; font.family: Theme.ui; font.pixelSize: 11
-            }
+            spacing: 10
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 8
+                Text { text: "GÁN " + root.chFuncs[learnPicker.ch] + "  (CH" + (learnPicker.ch + 1) + ")"
+                       color: Theme.text; font.family: Theme.mono; font.pixelSize: 15; font.bold: true }
+                Item { Layout.fillWidth: true }
+                Text { text: "hiện tại: " + rc.channelSources[learnPicker.ch]
+                       color: Theme.sub; font.family: Theme.mono; font.pixelSize: 11 }
+            }
+            // trạng thái phát hiện
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 52
+                radius: 8
+                color: learnPicker.pick >= 0 ? "#1a26d07c" : Theme.panel
+                border.color: learnPicker.pick >= 0 ? Theme.accent : Theme.strokeBtn
+                Text {
+                    anchors.centerIn: parent
+                    text: learnPicker.pick >= 0
+                          ? (learnPicker.manual >= 0 ? "ĐÃ CHỌN: " : "PHÁT HIỆN: ") + rc.controlNames[learnPicker.pick]
+                          : "Gạt cần hoặc bật công tắc muốn dùng làm " + root.chFuncs[learnPicker.ch] + "…"
+                    color: learnPicker.pick >= 0 ? Theme.accent : Theme.sub
+                    font.family: learnPicker.pick >= 0 ? Theme.mono : Theme.ui
+                    font.pixelSize: learnPicker.pick >= 0 ? 18 : 13
+                    font.bold: learnPicker.pick >= 0
+                }
+            }
+            // 8 nguồn, giá trị trực tiếp — chạm để chọn tay
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 4
+                rowSpacing: 6; columnSpacing: 6
                 Repeater {
-                    model: 4
+                    model: 8
                     delegate: Rectangle {
-                        id: axisCard
+                        id: srcCard
                         required property int index
-                        readonly property string name: root.stickNames[index]
                         readonly property int us: rc.controls[index]
-                        readonly property bool current: rc.channelSources[axisPicker.ch] === name
-                        readonly property bool moving: axisPicker.moving === index
-                        readonly property int usedBy: rc.channelSources.indexOf(name)
+                        readonly property bool picked: learnPicker.pick === index
+                        readonly property bool live: learnPicker.moving === index
+                        readonly property int usedBy: rc.channelSources.indexOf(rc.controlNames[index])
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 116
-                        radius: 8
-                        color: moving ? "#3326d07c" : (current ? "#1a26d07c" : Theme.panel)
-                        border.color: moving ? Theme.accent : (current ? Theme.accent : Theme.strokeBtn)
-                        border.width: moving ? 2 : 1
-
+                        Layout.preferredHeight: 62
+                        radius: 6
+                        color: picked ? "#3326d07c" : Theme.panel
+                        border.color: picked || live ? Theme.accent : Theme.strokeBtn
+                        border.width: picked ? 2 : 1
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.margins: 8
-                            spacing: 4
-                            Text { Layout.alignment: Qt.AlignHCenter; text: axisCard.name
-                                   color: Theme.text; font.family: Theme.mono; font.pixelSize: 18; font.bold: true }
-                            Text { Layout.alignment: Qt.AlignHCenter
-                                   text: rc.connected ? axisCard.us + " µs" : "—"
-                                   color: Theme.sub; font.family: Theme.mono; font.pixelSize: 11 }
+                            anchors.margins: 6
+                            spacing: 3
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text { text: rc.controlNames[srcCard.index]; color: Theme.text
+                                       font.family: Theme.mono; font.pixelSize: 14; font.bold: true }
+                                Item { Layout.fillWidth: true }
+                                Text { text: srcCard.usedBy >= 0 ? "CH" + (srcCard.usedBy + 1) : "—"
+                                       color: Theme.dim; font.family: Theme.mono; font.pixelSize: 10 }
+                            }
                             Rectangle {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 10
+                                Layout.preferredHeight: 8
                                 radius: 3
                                 color: Theme.bg; border.color: Theme.strokeBtn
-                                readonly property real f: Math.max(0, Math.min(1, (axisCard.us - 1000) / 1000))
+                                readonly property real f: Math.max(0, Math.min(1, (srcCard.us - 1000) / 1000))
                                 Rectangle {
                                     y: 1; height: parent.height - 2; radius: 2
                                     x: Math.min(parent.width * 0.5, parent.width * parent.f)
                                     width: Math.abs(parent.width * parent.f - parent.width * 0.5)
-                                    color: axisCard.moving ? Theme.accent : Theme.sub
+                                    color: srcCard.live || srcCard.picked ? Theme.accent : Theme.sub
                                 }
                                 Rectangle { x: parent.width / 2 - 1; width: 2; height: parent.height; color: Theme.dim }
                             }
-                            Text { Layout.alignment: Qt.AlignHCenter
-                                   text: axisCard.moving ? "● ĐANG GẠT"
-                                         : (axisCard.usedBy >= 0 ? "đang ở CH" + (axisCard.usedBy + 1) : "chưa dùng")
-                                   color: axisCard.moving ? Theme.accent : (axisCard.current ? Theme.accent : Theme.dim)
-                                   font.family: Theme.mono; font.pixelSize: 10; font.bold: axisCard.moving }
+                            Text { text: rc.connected ? srcCard.us + " µs" : "—"
+                                   color: Theme.sub; font.family: Theme.mono; font.pixelSize: 10 }
                         }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: { rc.setChannelSource(axisPicker.ch, axisCard.index); axisPicker.close() }
-                        }
+                        MouseArea { anchors.fill: parent; onClicked: learnPicker.manual = srcCard.index }
                     }
                 }
             }
             RowLayout {
                 Layout.fillWidth: true
+                spacing: 6
                 Text {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: "Áp dụng ngay vào RAM STM32. Kiểm tra lại hướng ở thanh CH, đảo chiều nếu cần, rồi LƯU."
+                    text: learnPicker.pickUsedBy >= 0 && learnPicker.pickUsedBy !== learnPicker.ch
+                          ? rc.controlNames[learnPicker.pick] + " đang ở CH" + (learnPicker.pickUsedBy + 1)
+                            + " — CH đó sẽ nhận " + rc.channelSources[learnPicker.ch] + " (hoán đổi)."
+                          : "Ghi RAM STM32, hiệu lực ngay. Kiểm tra hướng, đảo nếu cần, rồi LƯU."
                     color: Theme.dim; font.family: Theme.ui; font.pixelSize: 10
                 }
-                ActBtn { label: "ĐÓNG"; tint: Theme.sub; onActivated: axisPicker.close() }
+                ActBtn { label: "LÀM LẠI"; tint: Theme.sub
+                         onActivated: learnPicker.openFor(learnPicker.ch) }
+                ActBtn { label: "HUỶ"; tint: Theme.sub; onActivated: learnPicker.close() }
+                ActBtn { label: learnPicker.pick >= 0 ? "GÁN " + rc.controlNames[learnPicker.pick] : "GÁN"
+                         tint: Theme.accent
+                         enabled: learnPicker.pick >= 0 && !rc.busy
+                         onActivated: { rc.setChannelSource(learnPicker.ch, learnPicker.pick); learnPicker.close() } }
             }
         }
     }
