@@ -14,6 +14,7 @@
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
+#include <QVariantMap>
 
 namespace gcs::bridge {
 
@@ -21,11 +22,14 @@ class Backend : public QObject {
     Q_OBJECT
     // Danh sách chế độ nhanh: mỗi phần tử là { label, mode, desc }.
     Q_PROPERTY(QVariantList quickModes READ quickModes CONSTANT)
+    // Đường truyền đã lưu (config.json) — để thẻ kết nối điền sẵn và nút ↻ kết nối lại.
+    Q_PROPERTY(QVariantMap savedLink READ savedLink NOTIFY savedLinkChanged)
 
 public:
     explicit Backend(app::GcsController *controller, AppConfig config, QObject *parent = nullptr);
 
     QVariantList quickModes() const;
+    QVariantMap savedLink() const;
 
     // ── liên kết ────────────────────────────────────────────────────────────
     Q_INVOKABLE QStringList serialPorts() const;
@@ -33,6 +37,7 @@ public:
     Q_INVOKABLE void connectTcp(const QString &host, int port);
     Q_INVOKABLE void connectSerial(const QString &portName, int baud);
     Q_INVOKABLE void disconnect();
+    Q_INVOKABLE void reconnect(); // đóng link hiện tại (nếu có) rồi mở lại bằng cấu hình đã lưu
 
     // ── lệnh ────────────────────────────────────────────────────────────────
     Q_INVOKABLE void arm(bool force = false);
@@ -41,6 +46,9 @@ public:
     Q_INVOKABLE void takeoff(double altitudeM);
     Q_INVOKABLE void flyTo(double lat, double lon, double altRel);
     Q_INVOKABLE void startMission();
+
+signals:
+    void savedLinkChanged();
 
 private:
     void openWith(AppConfig cfg);

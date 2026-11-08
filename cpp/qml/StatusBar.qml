@@ -134,6 +134,23 @@ Rectangle {
             }
         }
 
+        // ── kết nối lại MAVLink bằng đường truyền đã lưu ───────────────────
+        Rectangle {
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: reTxt.implicitWidth + 16; implicitHeight: 26; radius: 4
+            color: reMa.pressed ? "#2637e0a0" : "transparent"
+            border.color: telemetry.connected && telemetry.linkPct > 0 ? Theme.stroke : Theme.warn
+            Text { id: reTxt; anchors.centerIn: parent; text: "↻ LINK"
+                   color: telemetry.connected && telemetry.linkPct > 0 ? Theme.text : Theme.warn
+                   font.family: Theme.mono; font.pixelSize: 11; font.bold: true }
+            MouseArea {
+                id: reMa
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: backend.reconnect()
+            }
+        }
+
         // ── cài đặt RC (công tắc / hiệu chỉnh / kênh) ───────────────────────
         Rectangle {
             Layout.alignment: Qt.AlignVCenter
@@ -146,23 +163,6 @@ Rectangle {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root.settingsRequested()
-            }
-        }
-
-        // ── thoát (toàn màn hình không có nút X hệ thống) ───────────────────
-        Rectangle {
-            Layout.alignment: Qt.AlignVCenter
-            implicitWidth: 30; implicitHeight: 26; radius: 4
-            color: quitMa.containsMouse ? "#33ff3b3b" : "transparent"
-            border.color: quitMa.containsMouse ? Theme.danger : Theme.stroke
-            Text { anchors.centerIn: parent; text: "✕"; color: Theme.danger
-                   font.family: Theme.mono; font.pixelSize: 12; font.bold: true }
-            MouseArea {
-                id: quitMa
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: Qt.quit()
             }
         }
     }

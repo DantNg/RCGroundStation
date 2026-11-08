@@ -29,6 +29,21 @@ QVariantList Backend::quickModes() const
     return out;
 }
 
+QVariantMap Backend::savedLink() const
+{
+    QVariantMap m;
+    m.insert(QStringLiteral("type"), m_config.connectionType);
+    m.insert(QStringLiteral("serialPort"), m_config.serialPort);
+    m.insert(QStringLiteral("baud"), m_config.baud);
+    m.insert(QStringLiteral("udpPort"), m_config.udpPort);
+    m.insert(QStringLiteral("tcpHost"), m_config.tcpHost);
+    m.insert(QStringLiteral("tcpPort"), m_config.tcpPort);
+    m.insert(QStringLiteral("label"), m_config.connectionType == QLatin1String("serial")
+                                          ? QStringLiteral("%1 @%2").arg(m_config.label()).arg(m_config.baud)
+                                          : m_config.label());
+    return m;
+}
+
 QStringList Backend::serialPorts() const
 {
     QStringList out;
@@ -42,6 +57,7 @@ void Backend::openWith(AppConfig cfg)
     cfg.role = m_config.role; // giữ vai trò/quyền của bản dựng
     m_config = cfg;
     m_config.save(); // nhớ đường truyền vừa dùng
+    emit savedLinkChanged();
     m_controller->connect(m_config.connectionString(), m_config.baud, m_config.label());
 }
 
@@ -74,6 +90,12 @@ void Backend::connectSerial(const QString &portName, int baud)
 void Backend::disconnect()
 {
     m_controller->disconnect();
+}
+
+void Backend::reconnect()
+{
+    m_controller->disconnect();
+    openWith(m_config);
 }
 
 void Backend::arm(bool force) { m_controller->commands().arm(force); }

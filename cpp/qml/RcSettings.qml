@@ -3,7 +3,7 @@
 // Bốn tab: CÔNG TẮC (giám sát SA..SD + gán chế độ bay cho từng vị trí) · HIỆU CHỈNH
 // (phiên hiệu chỉnh trên STM32: chọn kênh → BẮT ĐẦU → quét → CHỤP TÂM → ÁP DỤNG)
 // · KÊNH (CH1..CH8 + đảo chiều) · CẤU HÌNH (cần lái qua radio / Pi, giá trị giữ,
-// xuất RC, LƯU / BỎ THAY ĐỔI / MẶC ĐỊNH). Thao tác nguy hiểm đều hỏi xác nhận
+// xuất RC, LƯU / BỎ THAY ĐỔI / MẶC ĐỊNH, thoát ứng dụng). Thao tác nguy hiểm đều hỏi xác nhận
 // (PI_UI_AGENT_GUIDE.md §6). Số liệu từ context property `rc` (RcViewModel).
 // Nút ≥ 34px logic (~50px thật trên màn 1280×720) cho dễ chạm.
 import QtQuick
@@ -22,6 +22,8 @@ Rectangle {
     readonly property var posNames: ["LOW", "MID", "HIGH"]
     readonly property var adcNames: ["LH", "LV", "RH", "RV", "SB", "SC"]
     readonly property var stickNames: ["LH", "LV", "RH", "RV"]
+    // chức năng CH1..4 theo chuẩn ArduPilot (RCMAP mặc định)
+    readonly property var stickFuncs: ["ROLL", "PITCH", "THROTTLE", "YAW"]
     // SA/SD 2 vị trí (LOW/HIGH), SB/SC 3 vị trí — liệt kê từ trên xuống
     function positionsOf(sw) { return (sw === 0 || sw === 3) ? [2, 0] : [2, 1, 0] }
     // kênh CRSF đang lấy nguồn `name` ("CH3") — để ghi chú giá trị giữ
@@ -390,9 +392,27 @@ Rectangle {
                         Text { text: "CH" + (chRow.index + 1); color: Theme.text
                                font.family: Theme.mono; font.pixelSize: 13; font.bold: true
                                Layout.preferredWidth: 40 }
-                        Text { text: chRow.srcName; color: Theme.dim
-                               font.family: Theme.mono; font.pixelSize: 11
-                               Layout.preferredWidth: 26 }
+                        Text { text: chRow.index < 4 ? root.stickFuncs[chRow.index] : ""
+                               color: Theme.sub; font.family: Theme.mono; font.pixelSize: 11; font.bold: true
+                               Layout.preferredWidth: 70 }
+                        // CH1..4: chạm để chọn trục cần lái cấp cho kênh (MAP); CH5..8 chỉ hiển thị
+                        Rectangle {
+                            readonly property bool pickable: chRow.index < 4
+                            readonly property bool usable: pickable && rc.connected && !rc.busy
+                                                            && !rc.calActive && !telemetry.armed
+                            Layout.preferredWidth: 64
+                            Layout.preferredHeight: 32
+                            radius: 6
+                            color: pickable ? Theme.panel : "transparent"
+                            border.color: pickable ? Theme.strokeBtn : "transparent"
+                            opacity: !pickable || usable ? 1 : 0.4
+                            Text { anchors.centerIn: parent
+                                   text: chRow.srcName + (parent.pickable ? " ▾" : "")
+                                   color: parent.pickable ? Theme.text : Theme.dim
+                                   font.family: Theme.mono; font.pixelSize: 12; font.bold: parent.pickable }
+                            MouseArea { anchors.fill: parent; enabled: parent.usable
+                                        onClicked: axisPicker.openFor(chRow.index) }
+                        }
                         Rectangle {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 18
@@ -447,8 +467,9 @@ Rectangle {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: rc.message !== "" ? rc.message
-                              : "Chạm THƯỜNG / ĐẢO để đảo chiều nguồn của kênh (hiệu lực ngay). "
-                                + "Đảo SA..SD: kiểm tra lại gán mode ở tab CÔNG TẮC."
+                              : (telemetry.armed ? "Drone đang ARM — khoá đổi trục cần lái. "
+                                                 : "Chạm ô trục (▾) của CH1..4 để chọn cần làm ROLL / PITCH / THROTTLE / YAW. ")
+                                + "THƯỜNG / ĐẢO đảo chiều nguồn của kênh. Thay đổi có hiệu lực ngay (RAM) — LƯU để giữ."
                         color: rc.messageError ? Theme.dangerSoft : Theme.sub
                         font.family: Theme.ui; font.pixelSize: 11
                     }
@@ -615,14 +636,25 @@ Rectangle {
                     }
                 }
 
-                Text {
+                RowLayout {
                     Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    maximumLineCount: 2
-                    visible: rc.message !== ""
-                    text: rc.message
-                    color: rc.messageError ? Theme.dangerSoft : Theme.sub
-                    font.family: Theme.ui; font.pixelSize: 11
+                    spacing: 8
+                    Text {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 2
+                        text: rc.message
+                        color: rc.messageError ? Theme.dangerSoft : Theme.sub
+                        font.family: Theme.ui; font.pixelSize: 11
+                    }
+                    // thoát ứng dụng — chỉ đặt trong cài đặt để không lỡ chạm khi đang bay
+                    ActBtn { label: "⏻ THOÁT ỨNG DỤNG"; tint: Theme.danger
+                             onActivated: confirm.ask("Thoát LiteGCS?",
+                                                      "Đóng ứng dụng trạm mặt đất: mất telemetry và bản đồ cho tới khi mở lại."
+                                                      + (telemetry.armed ? "
+
+⚠ Drone đang ARM — chỉ thoát khi thật cần." : ""),
+                                                      "THOÁT", Theme.danger, () => Qt.quit()) }
                 }
             }
         }
@@ -672,6 +704,116 @@ Rectangle {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // ── chọn trục cần lái cho CH1..4 (ROLL/PITCH/THROTTLE/YAW) ──────────────
+    // Hiện giá trị trực tiếp 4 trục; trục lệch tâm nhiều nhất được đánh dấu
+    // "ĐANG GẠT" để người dùng gạt cần mong muốn rồi chạm vào nó. Trục đã cấp
+    // kênh khác sẽ được hoán đổi (setChannelSource).
+    Popup {
+        id: axisPicker
+        property int ch: 0
+        // vị trí 4 trục lúc mở — so với mốc này chứ không với 1500, vì cần ga
+        // không tự về giữa
+        property var base: [1500, 1500, 1500, 1500]
+        function openFor(c) { ch = c; base = [0, 1, 2, 3].map(i => rc.controls[i]); open() }
+        // trục đã dịch khỏi mốc nhiều nhất (> 150 µs), -1 nếu chưa gạt trục nào
+        readonly property int moving: {
+            let best = -1, dev = 150
+            for (let i = 0; i < 4; ++i) {
+                const d = Math.abs(rc.controls[i] - base[i])
+                if (d > dev) { dev = d; best = i }
+            }
+            return best
+        }
+
+        parent: root
+        anchors.centerIn: parent
+        width: Math.min(root.width - 40, 620)
+        modal: true
+        padding: 16
+        background: Rectangle { radius: 10; color: "#fa0e1210"; border.color: Theme.stroke }
+
+        contentItem: ColumnLayout {
+            spacing: 12
+            Text {
+                text: "CH" + (axisPicker.ch + 1) + " · " + root.stickFuncs[axisPicker.ch] + "  →  chọn trục cần lái"
+                color: Theme.text; font.family: Theme.ui; font.pixelSize: 13; font.bold: true
+            }
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: "Gạt cần bạn muốn dùng làm " + root.stickFuncs[axisPicker.ch]
+                      + " — trục đó sẽ sáng lên — rồi chạm vào nó. Nếu trục đã cấp kênh khác, hai kênh được hoán đổi."
+                color: Theme.sub; font.family: Theme.ui; font.pixelSize: 11
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Repeater {
+                    model: 4
+                    delegate: Rectangle {
+                        id: axisCard
+                        required property int index
+                        readonly property string name: root.stickNames[index]
+                        readonly property int us: rc.controls[index]
+                        readonly property bool current: rc.channelSources[axisPicker.ch] === name
+                        readonly property bool moving: axisPicker.moving === index
+                        readonly property int usedBy: rc.channelSources.indexOf(name)
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 116
+                        radius: 8
+                        color: moving ? "#3326d07c" : (current ? "#1a26d07c" : Theme.panel)
+                        border.color: moving ? Theme.accent : (current ? Theme.accent : Theme.strokeBtn)
+                        border.width: moving ? 2 : 1
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 4
+                            Text { Layout.alignment: Qt.AlignHCenter; text: axisCard.name
+                                   color: Theme.text; font.family: Theme.mono; font.pixelSize: 18; font.bold: true }
+                            Text { Layout.alignment: Qt.AlignHCenter
+                                   text: rc.connected ? axisCard.us + " µs" : "—"
+                                   color: Theme.sub; font.family: Theme.mono; font.pixelSize: 11 }
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 10
+                                radius: 3
+                                color: Theme.bg; border.color: Theme.strokeBtn
+                                readonly property real f: Math.max(0, Math.min(1, (axisCard.us - 1000) / 1000))
+                                Rectangle {
+                                    y: 1; height: parent.height - 2; radius: 2
+                                    x: Math.min(parent.width * 0.5, parent.width * parent.f)
+                                    width: Math.abs(parent.width * parent.f - parent.width * 0.5)
+                                    color: axisCard.moving ? Theme.accent : Theme.sub
+                                }
+                                Rectangle { x: parent.width / 2 - 1; width: 2; height: parent.height; color: Theme.dim }
+                            }
+                            Text { Layout.alignment: Qt.AlignHCenter
+                                   text: axisCard.moving ? "● ĐANG GẠT"
+                                         : (axisCard.usedBy >= 0 ? "đang ở CH" + (axisCard.usedBy + 1) : "chưa dùng")
+                                   color: axisCard.moving ? Theme.accent : (axisCard.current ? Theme.accent : Theme.dim)
+                                   font.family: Theme.mono; font.pixelSize: 10; font.bold: axisCard.moving }
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: { rc.setChannelSource(axisPicker.ch, axisCard.index); axisPicker.close() }
+                        }
+                    }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Áp dụng ngay vào RAM STM32. Kiểm tra lại hướng ở thanh CH, đảo chiều nếu cần, rồi LƯU."
+                    color: Theme.dim; font.family: Theme.ui; font.pixelSize: 10
+                }
+                ActBtn { label: "ĐÓNG"; tint: Theme.sub; onActivated: axisPicker.close() }
             }
         }
     }

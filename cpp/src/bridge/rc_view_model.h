@@ -148,6 +148,7 @@ public:
     Q_INVOKABLE void cancelCalibration();      // CAL_CANCEL
 
     Q_INVOKABLE void setReverse(int src, bool on);
+    Q_INVOKABLE void setChannelSource(int ch, int src); // MAP; nguồn đã dùng ở kênh khác ⇒ hoán đổi
     Q_INVOKABLE void setStickCrsf(bool viaRadio);
     Q_INVOKABLE void setStickHold(int src, int us);
     Q_INVOKABLE void setElrsOutput(bool on);

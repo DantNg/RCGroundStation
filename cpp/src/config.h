@@ -11,7 +11,11 @@ namespace gcs {
 
 struct AppConfig {
     QString connectionType = QStringLiteral("serial"); // "serial" | "udp" | "tcp"
+#ifdef Q_OS_LINUX
+    QString serialPort = QStringLiteral("ttyAMA0"); // uart0 của Pi → radio telemetry MAVLink
+#else
     QString serialPort;
+#endif
     int baud = 115200;
     int udpPort = 14550;
     QString tcpHost = QStringLiteral("127.0.0.1");

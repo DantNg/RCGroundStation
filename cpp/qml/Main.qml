@@ -154,6 +154,11 @@ ApplicationWindow {
                 anchors.topMargin: 38
                 visible: device.settingsOpen
                 onCloseRequested: device.settingsOpen = false
+                // --rc-tab=CH|CFG|… (thử nghiệm / chụp màn hình): mở thẳng tab đó
+                Component.onCompleted: {
+                    const a = Qt.application.arguments.find(x => x.startsWith("--rc-tab="))
+                    if (a) tab = a.substring(9)
+                }
             }
         }
     }

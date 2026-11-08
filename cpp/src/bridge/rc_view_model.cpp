@@ -398,6 +398,50 @@ void RcViewModel::setReverse(int src, bool on)
                 });
 }
 
+void RcViewModel::setChannelSource(int ch, int src)
+{
+    if (ch < 0 || ch > 7 || src < 0 || src > 7)
+        return;
+    auto indexOf = [](const QString &name) {
+        for (int i = 0; i < static_cast<int>(rc::kControls.size()); ++i)
+            if (name == QLatin1String(rc::kControls[i]))
+                return i;
+        return -1;
+    };
+    const int oldSrc = indexOf(m_channelSources[ch]);
+    if (oldSrc == src)
+        return;
+    if (oldSrc < 0)
+        return setMessage(QStringLiteral("Chưa đọc được ánh xạ CH%1 — thử đọc lại cấu hình.").arg(ch + 1), true);
+
+    auto writeMap = [this](int c, int s, Done onOk) {
+        QByteArray payload(1, static_cast<char>(c));
+        payload.append(static_cast<char>(s));
+        writeConfig(rc::kSubMap, payload,
+                    QStringLiteral("CH%1 ← %2").arg(c + 1).arg(QLatin1String(rc::kControls[s])),
+                    [this, c, s, onOk](int status, const QByteArray &v) {
+                        m_channelSources[c] = QLatin1String(rc::kControls[s]);
+                        emit configChanged();
+                        if (onOk)
+                            onOk(status, v);
+                    });
+    };
+
+    // nguồn mới đang cấp kênh khác ⇒ kênh đó nhận nguồn cũ (hoán đổi, không trục nào bị trùng/mất)
+    const int other = m_channelSources.indexOf(QLatin1String(rc::kControls[src]));
+    if (other >= 0 && other != ch) {
+        writeMap(ch, src, [this, writeMap, ch, other, oldSrc, src](int, const QByteArray &) {
+            writeMap(other, oldSrc, [this, ch, other, oldSrc, src](int, const QByteArray &) {
+                setMessage(QStringLiteral("Đã hoán đổi: CH%1 ← %2, CH%3 ← %4 (RAM). Bấm LƯU để giữ.")
+                               .arg(ch + 1).arg(QLatin1String(rc::kControls[src]))
+                               .arg(other + 1).arg(QLatin1String(rc::kControls[oldSrc])));
+            });
+        });
+    } else {
+        writeMap(ch, src, {});
+    }
+}
+
 void RcViewModel::setStickCrsf(bool viaRadio)
 {
     // trạng thái thật lấy từ cờ RC_STATE (stick_crsf), không giữ bản sao riêng

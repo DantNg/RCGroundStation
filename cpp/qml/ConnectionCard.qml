@@ -1,4 +1,5 @@
 // Thẻ kết nối — nổi giữa màn khi chưa có link. Chọn UDP / TCP / Serial rồi Kết nối.
+// Điền sẵn đường truyền đã lưu (mặc định SERIAL 115200); "KẾT NỐI LẠI" dùng lại nó.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -12,7 +13,8 @@ Rectangle {
     color: "#f20a0d0b"
     border.color: Theme.stroke
 
-    property string mode: "udp"
+    readonly property var saved: backend.savedLink
+    property string mode: saved.type || "serial"
 
     ColumnLayout {
         id: col
@@ -54,7 +56,7 @@ Rectangle {
             visible: root.mode === "udp"
             Layout.fillWidth: true; spacing: 8
             Label { text: "Cổng UDP"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 12 }
-            SpinBox { id: udpPort; from: 1; to: 65535; value: 14550; editable: true; Layout.fillWidth: true }
+            SpinBox { id: udpPort; from: 1; to: 65535; value: root.saved.udpPort || 14550; editable: true; Layout.fillWidth: true }
         }
 
         // ── TCP ───────────────────────────────────────────────────────────
@@ -64,12 +66,12 @@ Rectangle {
             RowLayout {
                 Layout.fillWidth: true; spacing: 8
                 Label { text: "Host"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 12 }
-                TextField { id: tcpHost; text: "127.0.0.1"; Layout.fillWidth: true }
+                TextField { id: tcpHost; text: root.saved.tcpHost || "127.0.0.1"; Layout.fillWidth: true }
             }
             RowLayout {
                 Layout.fillWidth: true; spacing: 8
                 Label { text: "Cổng"; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 12 }
-                SpinBox { id: tcpPort; from: 1; to: 65535; value: 5760; editable: true; Layout.fillWidth: true }
+                SpinBox { id: tcpPort; from: 1; to: 65535; value: root.saved.tcpPort || 5760; editable: true; Layout.fillWidth: true }
             }
         }
 
@@ -84,7 +86,7 @@ Rectangle {
                     id: serialPort
                     Layout.fillWidth: true
                     model: backend.serialPorts()
-                    Component.onCompleted: if (count > 0) currentIndex = 0
+                    Component.onCompleted: currentIndex = Math.max(0, find(root.saved.serialPort))
                 }
             }
             RowLayout {
@@ -93,7 +95,8 @@ Rectangle {
                 ComboBox {
                     id: baud
                     Layout.fillWidth: true
-                    model: [ 57600, 115200, 921600, 9600, 38400 ]
+                    model: [ 115200, 57600, 921600, 9600, 38400 ]
+                    Component.onCompleted: currentIndex = Math.max(0, model.indexOf(root.saved.baud))
                 }
             }
         }
@@ -109,23 +112,12 @@ Rectangle {
             }
         }
 
-        // ── thoát ứng dụng (toàn màn hình nên không có nút X hệ thống) ───────
-        Rectangle {
+        // mở lại đúng đường truyền lần trước (vd sau khi cắm lại radio)
+        Button {
             Layout.fillWidth: true
-            Layout.preferredHeight: 34
-            radius: 6
-            color: exitMa.pressed ? "#33ff3b3b" : "transparent"
-            border.color: Theme.danger
-            Text {
-                anchors.centerIn: parent; text: "✕ THOÁT"
-                color: Theme.danger; font.family: Theme.mono; font.pixelSize: 12; font.bold: true; font.letterSpacing: 0.6
-            }
-            MouseArea {
-                id: exitMa
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: Qt.quit()
-            }
+            visible: (root.saved.label || "") !== ""
+            text: "↻ KẾT NỐI LẠI  " + (root.saved.label || "")
+            onClicked: backend.reconnect()
         }
     }
 }
