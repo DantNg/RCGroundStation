@@ -24,6 +24,23 @@ Rectangle {
     readonly property var stickNames: ["LH", "LV", "RH", "RV"]
     // chức năng CH1..8: CH1..4 theo chuẩn ArduPilot (RCMAP mặc định), CH5..8 kênh phụ
     readonly property var chFuncs: ["ROLL", "PITCH", "THROTTLE", "YAW", "AUX1", "AUX2", "AUX3", "AUX4"]
+    readonly property var funcShort: ["ROLL", "PITCH", "THR", "YAW", "AUX1", "AUX2", "AUX3", "AUX4"]
+    // Mọi hiển thị đi theo ánh xạ thật (SUB_MAP), không theo tên nguồn nội bộ:
+    // nguồn đang cấp kênh ch, giá trị của nó, và chức năng của một nguồn.
+    function srcOfCh(ch) { return rc.channelSources[ch] }
+    function valOfCh(ch) {
+        const i = rc.controlNames.indexOf(rc.channelSources[ch])
+        return i >= 0 ? rc.controls[i] : 1500
+    }
+    function funcOfSrc(name) {
+        const ch = rc.channelSources.indexOf(name)
+        return ch >= 0 ? funcShort[ch] : "—"
+    }
+    // công tắc SA..SD (0..3) xếp theo kênh đang cấp (AUX1 trước), chưa gán xuống cuối
+    readonly property var swOrder: [0, 1, 2, 3].sort((a, b) => {
+        const ca = rc.channelSources.indexOf(swNames[a]), cb = rc.channelSources.indexOf(swNames[b])
+        return (ca < 0 ? 99 : ca) - (cb < 0 ? 99 : cb)
+    })
     // SA/SD 2 vị trí (LOW/HIGH), SB/SC 3 vị trí — liệt kê từ trên xuống
     function positionsOf(sw) { return (sw === 0 || sw === 3) ? [2, 0] : [2, 1, 0] }
     // kênh CRSF đang lấy nguồn `name` ("CH3") — để ghi chú giá trị giữ
@@ -157,10 +174,12 @@ Rectangle {
                     spacing: 8
 
                     Repeater {
-                        model: 4
+                        model: root.swOrder
                         delegate: Rectangle {
                             id: card
-                            required property int index
+                            required property int modelData
+                            readonly property int index: modelData   // chỉ số công tắc SA..SD
+                            readonly property int ch: rc.channelSources.indexOf(root.swNames[index])
                             readonly property int cur: rc.switchPos[index]
                             Layout.fillWidth: true
                             Layout.fillHeight: true
@@ -175,9 +194,10 @@ Rectangle {
 
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    Text { text: root.swNames[card.index]; color: Theme.text
+                                    Text { text: card.ch >= 0 ? root.chFuncs[card.ch] : "—"; color: Theme.text
                                            font.family: Theme.mono; font.pixelSize: 18; font.bold: true }
-                                    Text { text: (card.index === 0 || card.index === 3) ? "2 VỊ TRÍ" : "3 VỊ TRÍ"
+                                    Text { text: (card.ch >= 0 ? "CH" + (card.ch + 1) + " ← " : "") + root.swNames[card.index]
+                                                 + " · " + ((card.index === 0 || card.index === 3) ? "2" : "3") + " VT"
                                            color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9
                                            Layout.alignment: Qt.AlignBottom; Layout.bottomMargin: 3 }
                                     Item { Layout.fillWidth: true }
@@ -248,21 +268,16 @@ Rectangle {
             RowLayout {
                 spacing: 10
 
-                // hai gimbal (dot = (H, -V)), số µs dưới mỗi trục. Nút ⇄ đổi chỗ
-                // trái/phải khi cần LH/LV nằm bên phải trên tay cầm (lưu lại).
+                // hai gimbal theo CHỨC NĂNG (Mode 2: trái YAW/THROTTLE, phải ROLL/PITCH)
+                // lấy nguồn qua ánh xạ kênh nên luôn khớp tab KÊNH. PITCH vẽ ngược
+                // (đẩy lên = PWM thấp, quy ước ArduPilot). ⇄ đổi chỗ hai gimbal (lưu lại).
                 ColumnLayout {
                     Layout.fillHeight: true
                     spacing: 6
                     RowLayout {
                         spacing: 10
-                        Gimbal { title: "TRÁI"
-                                 readonly property int b: rc.gimbalSwap ? 2 : 0
-                                 h: rc.controls[b]; v: rc.controls[b + 1]
-                                 hName: rc.gimbalSwap ? "RH" : "LH"; vName: rc.gimbalSwap ? "RV" : "LV" }
-                        Gimbal { title: "PHẢI"
-                                 readonly property int b: rc.gimbalSwap ? 0 : 2
-                                 h: rc.controls[b]; v: rc.controls[b + 1]
-                                 hName: rc.gimbalSwap ? "LH" : "RH"; vName: rc.gimbalSwap ? "LV" : "RV" }
+                        Gimbal { title: "TRÁI"; hCh: rc.gimbalSwap ? 0 : 3; vCh: rc.gimbalSwap ? 1 : 2 }
+                        Gimbal { title: "PHẢI"; hCh: rc.gimbalSwap ? 3 : 0; vCh: rc.gimbalSwap ? 2 : 1 }
                     }
                     Toggle {
                         checked: rc.gimbalSwap
@@ -329,7 +344,7 @@ Rectangle {
                             onTapped: rc.toggleCalChannel(index)
                             cells: [
                                 sel ? "☑" : "☐",
-                                root.adcNames[index],
+                                root.adcNames[index] + " " + root.funcOfSrc(root.adcNames[index]),
                                 rc.rawAdc[index],
                                 ranged ? mn : "—",
                                 centered ? mid : (ranged ? "giữa" : "—"),
@@ -1006,7 +1021,7 @@ Rectangle {
         property bool dimmed: false
         property int span: -1
         signal tapped()
-        readonly property var widths: [24, 32, 40, 40, 40, 40, 96, 0] // 0 = phần còn lại
+        readonly property var widths: [24, 78, 40, 40, 40, 40, 96, 0] // 0 = phần còn lại
         Layout.fillWidth: true
         Layout.preferredHeight: header ? 18 : 31
         radius: 5
@@ -1100,21 +1115,28 @@ Rectangle {
     }
 
     component Gimbal: ColumnLayout {
+        id: gimbal
         property string title
-        property int h: 1500
-        property int v: 1500
-        property string hName
-        property string vName
+        property int hCh: 3   // kênh trục ngang (chỉ số 0..3 = ROLL/PITCH/THR/YAW)
+        property int vCh: 2   // kênh trục dọc
+        readonly property int h: root.valOfCh(hCh)
+        readonly property int v: root.valOfCh(vCh)
+        // PITCH: đẩy cần lên cho PWM thấp (ArduPilot) ⇒ vẽ ngược để chấm đi theo tay
+        readonly property int vSign: vCh === 1 ? -1 : 1
         spacing: 4
         Text { text: title; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9; font.letterSpacing: 1 }
         Rectangle {
             id: pad
             Layout.preferredWidth: 150; Layout.preferredHeight: 150
             radius: 8; color: Theme.panel; border.color: Theme.strokeBtn
-            readonly property real nx: Math.max(-1, Math.min(1, (h - 1500) / 500))
-            readonly property real ny: Math.max(-1, Math.min(1, (v - 1500) / 500))
+            readonly property real nx: Math.max(-1, Math.min(1, (gimbal.h - 1500) / 500))
+            readonly property real ny: gimbal.vSign * Math.max(-1, Math.min(1, (gimbal.v - 1500) / 500))
             Rectangle { x: parent.width / 2; y: 6; width: 1; height: parent.height - 12; color: Theme.stroke }
             Rectangle { y: parent.height / 2; x: 6; height: 1; width: parent.width - 12; color: Theme.stroke }
+            Text { anchors.horizontalCenter: parent.horizontalCenter; y: 4
+                   text: root.funcShort[gimbal.vCh]; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9 }
+            Text { anchors.verticalCenter: parent.verticalCenter; anchors.right: parent.right; anchors.rightMargin: 4
+                   text: root.funcShort[gimbal.hCh]; color: Theme.dim; font.family: Theme.mono; font.pixelSize: 9 }
             Rectangle {
                 width: 16; height: 16; radius: 8
                 color: rc.connected ? Theme.danger : Theme.dim
@@ -1122,7 +1144,9 @@ Rectangle {
                 y: parent.height / 2 - pad.ny * (parent.height / 2 - 10) - height / 2
             }
         }
-        Text { text: hName + " " + (rc.connected ? h : "—") + "   " + vName + " " + (rc.connected ? v : "—")
+        Text { text: root.funcShort[gimbal.hCh] + "·" + root.srcOfCh(gimbal.hCh) + " " + (rc.connected ? gimbal.h : "—")
+               color: Theme.text; font.family: Theme.mono; font.pixelSize: 11 }
+        Text { text: root.funcShort[gimbal.vCh] + "·" + root.srcOfCh(gimbal.vCh) + " " + (rc.connected ? gimbal.v : "—")
                color: Theme.text; font.family: Theme.mono; font.pixelSize: 11 }
     }
 }

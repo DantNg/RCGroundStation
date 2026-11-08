@@ -207,7 +207,10 @@ void RcViewModel::handleSwitches(const rc::RcState &st)
     bool displayChanged = false;
 
     for (int i = 0; i < 4; ++i) {
-        const int p = st.switchPos[i];
+        // vị trí lấy từ controls_us (đã áp REVERSE) chứ không từ switch_pos (thô):
+        // đảo một công tắc thì cả hiển thị lẫn gán mode đi theo cái drone nhận
+        const int us = st.controlsUs[4 + i];
+        const int p = us < 1250 ? 0 : (us > 1750 ? 2 : 1);
         if (p != m_switchPos[i]) {
             m_switchPos[i] = p;
             displayChanged = true;
