@@ -1,9 +1,10 @@
 // Trang cài đặt tay điều khiển RC — phủ lên vùng giữa khi bấm ⚙ trên thanh trạng thái.
 //
-// Bốn tab: CÔNG TẮC (giám sát SA..SD + gán chế độ bay cho từng vị trí) · HIỆU CHỈNH
+// Các tab: CÔNG TẮC (giám sát SA..SD + gán chế độ bay cho từng vị trí) · HIỆU CHỈNH
 // (phiên hiệu chỉnh trên STM32: chọn kênh → BẮT ĐẦU → quét → CHỤP TÂM → ÁP DỤNG)
 // · KÊNH (CH1..CH8 + đảo chiều) · CẤU HÌNH (cần lái qua radio / Pi, giá trị giữ,
-// xuất RC, LƯU / BỎ THAY ĐỔI / MẶC ĐỊNH, thoát ứng dụng). Thao tác nguy hiểm đều hỏi xác nhận
+// xuất RC, LƯU / BỎ THAY ĐỔI / MẶC ĐỊNH, thoát ứng dụng) · WI-FI (WifiPage.qml).
+// Thao tác nguy hiểm đều hỏi xác nhận
 // (PI_UI_AGENT_GUIDE.md §6). Số liệu từ context property `rc` (RcViewModel).
 // Nút ≥ 34px logic (~50px thật trên màn 1280×720) cho dễ chạm.
 import QtQuick
@@ -63,14 +64,14 @@ Rectangle {
             spacing: 6
 
             Text {
-                text: "RC SETUP"; color: Theme.text
+                text: "CÀI ĐẶT"; color: Theme.text
                 font.family: Theme.ui; font.pixelSize: 13; font.bold: true; font.letterSpacing: 1.5
                 Layout.rightMargin: 4
             }
 
             Repeater {
                 model: [ { k: "SW", t: "CÔNG TẮC" }, { k: "CAL", t: "HIỆU CHỈNH" },
-                         { k: "CH", t: "KÊNH" }, { k: "CFG", t: "CẤU HÌNH" } ]
+                         { k: "CH", t: "KÊNH" }, { k: "CFG", t: "CẤU HÌNH" }, { k: "WIFI", t: "WI-FI" } ]
                 delegate: Rectangle {
                     required property var modelData
                     readonly property bool sel: root.tab === modelData.k
@@ -140,7 +141,7 @@ Rectangle {
         StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            currentIndex: ["SW", "CAL", "CH", "CFG"].indexOf(root.tab)
+            currentIndex: ["SW", "CAL", "CH", "CFG", "WIFI"].indexOf(root.tab)
 
             // ════════ CÔNG TẮC ══════════════════════════════════════════════
             ColumnLayout {
@@ -669,14 +670,18 @@ Rectangle {
                     ActBtn { label: "⏻ THOÁT ỨNG DỤNG"; tint: Theme.danger
                              onActivated: confirm.ask("Thoát LiteGCS?",
                                                       "Đóng ứng dụng trạm mặt đất: mất telemetry và bản đồ cho tới khi mở lại."
-                                                      + (telemetry.armed ? "
-
-⚠ Drone đang ARM — chỉ thoát khi thật cần." : ""),
+                                                      + (telemetry.armed ? "\n\n⚠ Drone đang ARM — chỉ thoát khi thật cần." : ""),
                                                       "THOÁT", Theme.danger, () => Qt.quit()) }
                 }
             }
+
+            // ════════ WI-FI ═════════════════════════════════════════════════
+            WifiPage {}
         }
     }
+
+    // quét / cập nhật Wi-Fi chỉ khi tab đang hiện
+    Binding { target: wifi; property: "active"; value: root.visible && root.tab === "WIFI" }
 
     // ── chọn chế độ cho một vị trí công tắc ─────────────────────────────────
     Popup {

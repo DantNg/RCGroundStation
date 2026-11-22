@@ -50,6 +50,8 @@ set(SOURCES
     src/bridge/telemetry_view_model.cpp
     src/bridge/backend.cpp
     src/bridge/rc_view_model.cpp
+
+    src/net/wifi_manager.cpp
 )
 
 qt_add_executable(LiteGCS WIN32 ${SOURCES})
@@ -85,6 +87,8 @@ qt_add_qml_module(LiteGCS
         qml/ConnectionCard.qml
         qml/WarningBanners.qml
         qml/RcSettings.qml
+        qml/WifiPage.qml
+        qml/OnScreenKeyboard.qml
     RESOURCES
         qml/fonts/JetBrainsMono-Regular.ttf
         qml/fonts/ChakraPetch-Medium.ttf
