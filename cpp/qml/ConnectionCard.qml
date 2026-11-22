@@ -10,7 +10,7 @@ import GroundCtrl
 Rectangle {
     id: root
     implicitWidth: 470
-    implicitHeight: col.implicitHeight + 32
+    implicitHeight: col.implicitHeight + 28
     radius: 14
     color: "#f50a0d0b"
     border.color: Theme.stroke
@@ -47,8 +47,8 @@ Rectangle {
     ColumnLayout {
         id: col
         anchors.fill: parent
-        anchors.margins: 16
-        spacing: 12
+        anchors.margins: 14
+        spacing: 8
 
         // ── tiêu đề ───────────────────────────────────────────────────────
         RowLayout {
@@ -82,7 +82,7 @@ Rectangle {
         Rectangle {
             visible: (root.saved.label || "") !== ""
             Layout.fillWidth: true
-            Layout.preferredHeight: 56
+            Layout.preferredHeight: 50
             radius: 10
             color: "#0f1f18"
             border.color: "#2a5c47"
@@ -120,7 +120,7 @@ Rectangle {
                     required property var modelData
                     readonly property bool sel: root.mode === modelData.k
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 44
+                    Layout.preferredHeight: 40
                     radius: 8
                     color: sel ? "#143327" : Theme.panel
                     border.color: sel ? Theme.accent : Theme.strokeBtn
@@ -158,7 +158,7 @@ Rectangle {
             }
             Flickable {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 36
+                Layout.preferredHeight: 34
                 contentWidth: portRow.width
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
@@ -241,7 +241,7 @@ Rectangle {
         // ── kết nối ───────────────────────────────────────────────────────
         CardBtn {
             Layout.fillWidth: true
-            Layout.preferredHeight: 44
+            Layout.preferredHeight: 40
             primary: true
             enabled: root.canConnect
             text: root.mode === "serial"
@@ -263,7 +263,7 @@ Rectangle {
         property bool selected: false
         signal clicked()
         implicitWidth: chipTxt.implicitWidth + 24
-        implicitHeight: 36
+        implicitHeight: 34
         radius: 8
         opacity: enabled ? 1 : 0.4
         color: selected ? "#143327" : (chipMa.pressed ? "#18201b" : Theme.panel)
