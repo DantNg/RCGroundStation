@@ -83,6 +83,7 @@ ApplicationWindow {
                     Layout.preferredHeight: 38
                     settingsOpen: device.settingsOpen
                     onSettingsRequested: device.settingsOpen = !device.settingsOpen
+                    onUpdateRequested: { rcSettings.tab = "CFG"; device.settingsOpen = true }
                 }
 
                 RowLayout {

@@ -44,6 +44,7 @@ set(SOURCES
     src/app/store.cpp
     src/app/link_manager.cpp
     src/app/controller.cpp
+    src/app/update_manager.cpp
 
     src/rc/rc_link.cpp
 
@@ -57,7 +58,19 @@ set(SOURCES
 qt_add_executable(LiteGCS WIN32 ${SOURCES})
 
 target_include_directories(LiteGCS PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}/generated)
+
+# ── phiên bản = commit git (sinh lại mỗi lần build, chỉ ghi khi đổi) ──────────
+# UpdateManager so commit này với bản tools/pi/litegcs-update.sh vừa build.
+add_custom_target(litegcs_version
+    COMMAND ${CMAKE_COMMAND}
+        -DSRC=${CMAKE_CURRENT_SOURCE_DIR}
+        -DOUT=${CMAKE_CURRENT_BINARY_DIR}/generated/litegcs_version.h
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/gen_version.cmake
+    BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/generated/litegcs_version.h
+    COMMENT "Phiên bản LiteGCS từ git")
+add_dependencies(LiteGCS litegcs_version)
 
 # MAVLink C library (header-only, generated). Treat as SYSTEM so its generator
 # warnings don't drown out ours.

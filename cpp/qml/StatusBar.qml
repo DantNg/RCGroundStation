@@ -9,6 +9,7 @@ Rectangle {
 
     property bool settingsOpen: false
     signal settingsRequested()
+    signal updateRequested()   // chạm chip ⬆ BẢN MỚI → mở CÀI ĐẶT › CẤU HÌNH
 
     gradient: Gradient {
         GradientStop { position: 0.0; color: Theme.topbar1 }
@@ -132,6 +133,19 @@ Rectangle {
                 text: telemetry.battPct < 0 ? "—" : telemetry.battPct + "%"
                 color: Theme.text; font.family: Theme.mono; font.pixelSize: 11
             }
+        }
+
+        // ── có bản mới đã build sẵn (tools/pi/litegcs-update.sh) ───────────
+        Rectangle {
+            visible: updater.updateAvailable
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: upTxt.implicitWidth + 16; implicitHeight: 26; radius: 4
+            color: upMa.pressed ? "#2637e0a0" : "#1437e0a0"
+            border.color: Theme.accent
+            Text { id: upTxt; anchors.centerIn: parent; text: "⬆ BẢN MỚI"
+                   color: Theme.accent; font.family: Theme.mono; font.pixelSize: 11; font.bold: true }
+            MouseArea { id: upMa; anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                        onClicked: root.updateRequested() }
         }
 
         // ── kết nối lại MAVLink bằng đường truyền đã lưu ───────────────────

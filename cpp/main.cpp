@@ -8,6 +8,7 @@
 // Cửa sổ mở ở trạng thái chưa kết nối; chọn đường truyền (UDP/TCP/Serial) rồi
 // Kết nối. Thử không cần phần cứng: chạy bộ mô phỏng rồi kết nối UDP cổng 14550.
 #include "app/controller.h"
+#include "app/update_manager.h"
 #include "bridge/backend.h"
 #include "bridge/rc_view_model.h"
 #include "bridge/telemetry_view_model.h"
@@ -63,6 +64,8 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("rc"), &rc);
     gcs::net::WifiManager wifi;
     engine.rootContext()->setContextProperty(QStringLiteral("wifi"), &wifi);
+    gcs::app::UpdateManager updater;
+    engine.rootContext()->setContextProperty(QStringLiteral("updater"), &updater);
 
     // Kho định nghĩa nhà cung cấp tile cho plugin OSM của Qt Location. Bản đồ 2D
     // vệ tinh (Esri World Imagery) dùng thứ tự tile z/y/x — plugin custom.host chỉ

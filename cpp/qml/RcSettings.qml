@@ -655,6 +655,54 @@ Rectangle {
                     }
                 }
 
+                // phần mềm: phiên bản đang chạy + tự cập nhật (Raspberry Pi OS)
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 44
+                    radius: 8
+                    color: updater.updateAvailable ? "#0f2a1f" : Theme.panelSolid
+                    border.color: updater.updateAvailable ? Theme.accent : Theme.stroke
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12; anchors.rightMargin: 6
+                        spacing: 8
+                        Text { text: "PHẦN MỀM"; color: Theme.dim
+                               font.family: Theme.mono; font.pixelSize: 10; font.letterSpacing: 1 }
+                        Text { text: updater.version; color: Theme.text
+                               font.family: Theme.mono; font.pixelSize: 12; font.bold: true }
+                        Text {
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                            text: !updater.supported ? "· tự cập nhật chỉ có trên Raspberry Pi OS"
+                                  : updater.updateAvailable ? "· bản " + updater.newVersion + " đã sẵn sàng"
+                                  : updater.message !== "" ? "· " + updater.message
+                                    + (updater.checkedAt !== "" && updater.state !== "building" ? " (" + updater.checkedAt + ")" : "")
+                                  : ""
+                            color: updater.updateAvailable ? Theme.accent
+                                   : (updater.state === "failed" ? Theme.dangerSoft : Theme.sub)
+                            font.family: Theme.ui; font.pixelSize: 11
+                        }
+                        ActBtn {
+                            visible: updater.supported && !updater.updateAvailable
+                            label: updater.state === "checking" ? "ĐANG KIỂM TRA…"
+                                   : updater.state === "building" ? "ĐANG BUILD…" : "KIỂM TRA"
+                            tint: Theme.sub
+                            enabled: updater.state !== "checking" && updater.state !== "building"
+                            onActivated: updater.checkNow()
+                        }
+                        ActBtn {
+                            visible: updater.updateAvailable
+                            label: telemetry.armed ? "⬆ CẬP NHẬT (ĐANG ARM)" : "⬆ CẬP NHẬT"
+                            tint: Theme.accent
+                            enabled: !telemetry.armed && updater.canRestart
+                            onActivated: confirm.ask("Cập nhật lên bản " + updater.newVersion + "?",
+                                                     "LiteGCS khởi động lại (~5 giây) vào bản mới. Link MAVLink và tay cầm "
+                                                     + "kết nối lại tự động; bản đồ / telemetry gián đoạn trong lúc đó.",
+                                                     "KHỞI ĐỘNG LẠI", Theme.accent, () => updater.restartToUpdate())
+                        }
+                    }
+                }
+
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
